@@ -1,13 +1,13 @@
 {
     "configuration": "default",
     "documentId": "a4f0cff30b14ae6c86f211bc",
-    "documentMicroversion": "e55db5301d554ee33d894fd0",
+    "documentMicroversion": "1e6cb62c9be049fff001c24a",
     "elementId": "b6cafee21a1887cc21e47919",
     "fullConfiguration": "default",
     "id": "M6uQoJfJ6YLef+bEo",
     "isStandardContent": false,
     "name": "hip_right <1>",
-    "partId": "J5D",
+    "partId": "RKBD",
     "suppressed": false,
     "type": "Part"
 }

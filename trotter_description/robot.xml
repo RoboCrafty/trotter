@@ -18,149 +18,161 @@
   <worldbody>
     <!-- Link base_link -->
     <body name="base_link" pos="0 0 0.18" quat="1 0 0 0" childclass="Trotter">
-      <freejoint name="base_link_freejoint"/> # Use this to fix base for testing stuff
-      <inertial pos="0.133179 -0.0932555 0.173946" mass="0.504027" fullinertia="0.0014814 0.00195425 0.000938764 1.05849e-06 1.95541e-06 -2.42731e-05"/>
+      <inertial pos="0.131805 -0.10005 0.17386" mass="0.66107" fullinertia="0.00190698 0.00318323 0.001894 -5.48331e-06 4.15359e-06 -4.10627e-05"/>
       <!-- Part main -->
-      <geom type="mesh" class="visual" pos="0.0952325 -0.0903021 0.135069" quat="0.500364 0.499636 -0.499636 -0.500364" mesh="main" material="main_material"/>
-      <geom type="mesh" class="collision" pos="0.0952325 -0.0903021 0.135069" quat="0.500364 0.499636 -0.499636 -0.500364" mesh="main" material="main_material"/>
+      <geom type="mesh" class="visual" pos="0.07436 -0.0982068 0.133102" quat="0.500364 0.499636 -0.499636 -0.500364" mesh="main" material="main_material"/>
+      <geom type="mesh" class="collision" pos="0.07436 -0.0982068 0.133102" quat="0.500364 0.499636 -0.499636 -0.500364" mesh="main" material="main_material"/>
+      <!-- Part eye_right -->
+      <geom type="mesh" class="visual" pos="0.00673101 -0.333813 0.391796" quat="9e-12 1 0 0" mesh="eye_right" material="eye_right_material"/>
+      <geom type="mesh" class="collision" pos="0.00673101 -0.333813 0.391796" quat="9e-12 1 0 0" mesh="eye_right" material="eye_right_material"/>
       <!-- Part base_link -->
-      <geom type="mesh" class="visual" pos="-0.000697596 0.0637043 0.0236654" quat="1 -9e-12 -0 0" mesh="base_link" material="base_link_material"/>
-      <geom type="mesh" class="collision" pos="-0.000697596 0.0637043 0.0236654" quat="1 -9e-12 -0 0" mesh="base_link" material="base_link_material"/>
+      <geom type="mesh" class="visual" pos="0.0166968 0.0557996 0.0216421" quat="1 -9e-12 -0 0" mesh="base_link" material="base_link_material"/>
+      <geom type="mesh" class="collision" pos="0.0166968 0.0557996 0.0216421" quat="1 -9e-12 -0 0" mesh="base_link" material="base_link_material"/>
+      <!-- Part eye_right_2 -->
+      <geom type="mesh" class="visual" pos="0.076731 -0.333813 0.391796" quat="9e-12 1 0 0" mesh="eye_right" material="eye_right_material"/>
+      <geom type="mesh" class="collision" pos="0.076731 -0.333813 0.391796" quat="9e-12 1 0 0" mesh="eye_right" material="eye_right_material"/>
       <!-- Part main_2 -->
-      <geom type="mesh" class="visual" pos="0.171165 -0.0903021 0.134959" quat="0.499636 -0.500364 0.500364 -0.499636" mesh="main" material="main_material"/>
-      <geom type="mesh" class="collision" pos="0.171165 -0.0903021 0.134959" quat="0.499636 -0.500364 0.500364 -0.499636" mesh="main" material="main_material"/>
+      <geom type="mesh" class="visual" pos="0.18856 -0.0982068 0.132935" quat="0.499636 -0.500364 0.500364 -0.499636" mesh="main" material="main_material"/>
+      <geom type="mesh" class="collision" pos="0.18856 -0.0982068 0.132935" quat="0.499636 -0.500364 0.500364 -0.499636" mesh="main" material="main_material"/>
       <!-- Part base_link_cover -->
-      <geom type="mesh" class="visual" pos="-0.000697596 0.0637043 0.0236654" quat="1 -9e-12 -0 0" mesh="base_link_cover" material="base_link_cover_material"/>
-      <geom type="mesh" class="collision" pos="-0.000697596 0.0637043 0.0236654" quat="1 -9e-12 -0 0" mesh="base_link_cover" material="base_link_cover_material"/>
+      <geom type="mesh" class="visual" pos="0.0166968 0.0557996 0.0216421" quat="1 -9e-12 -0 0" mesh="base_link_cover" material="base_link_cover_material"/>
+      <geom type="mesh" class="collision" pos="0.0166968 0.0557996 0.0216421" quat="1 -9e-12 -0 0" mesh="base_link_cover" material="base_link_cover_material"/>
+      <!-- Part composite_part_1 -->
+      <geom type="mesh" class="visual" pos="0.150733 -0.0812968 0.17701" quat="0 -0 9e-12 1" mesh="composite_part_1" material="composite_part_1_material"/>
+      <geom type="mesh" class="collision" pos="0.150733 -0.0812968 0.17701" quat="0 -0 9e-12 1" mesh="composite_part_1" material="composite_part_1_material"/>
       <!-- Link hip_left -->
-      <body name="hip_left" pos="0.188565 -0.102802 0.134933" quat="0.500364 0.499636 -0.499636 -0.500364">
+      <body name="hip_left" pos="0.20596 -0.110707 0.13291" quat="0.500364 0.499636 -0.499636 -0.500364">
         <!-- Joint from base_link to hip_left -->
         <joint axis="0 0 1" name="joint_thigh_left" type="hinge"/>
-        <inertial pos="-8.57372e-05 -0.0129028 -0.0188034" mass="0.074851" fullinertia="2.13017e-05 1.3421e-05 2.19106e-05 2.3758e-08 -5.754e-09 -8.65877e-07"/>
+        <inertial pos="-8.21293e-05 -0.0123598 -0.0247369" mass="0.0781391" fullinertia="2.39732e-05 1.55681e-05 2.26781e-05 2.0274e-08 -1.2598e-08 -1.89596e-06"/>
         <!-- Part main_3 -->
-        <geom type="mesh" class="visual" pos="-0 -0.0177 -0.0197" quat="0.5 0.5 -0.5 -0.5" mesh="main" material="main_material"/>
-        <geom type="mesh" class="collision" pos="-0 -0.0177 -0.0197" quat="0.5 0.5 -0.5 -0.5" mesh="main" material="main_material"/>
+        <geom type="mesh" class="visual" pos="-0 -0.0177 -0.0267" quat="0.5 0.5 -0.5 -0.5" mesh="main" material="main_material"/>
+        <geom type="mesh" class="collision" pos="-0 -0.0177 -0.0267" quat="0.5 0.5 -0.5 -0.5" mesh="main" material="main_material"/>
         <!-- Part hip_left -->
-        <geom type="mesh" class="visual" pos="-0.0700343 -0.0303644 -0.0221518" quat="0.5 0.5 -0.5 -0.5" mesh="hip_left" material="hip_left_material"/>
-        <geom type="mesh" class="collision" pos="-0.0700343 -0.0303644 -0.0221518" quat="0.5 0.5 -0.5 -0.5" mesh="hip_left" material="hip_left_material"/>
+        <geom type="mesh" class="visual" pos="-0.0700343 -0.0303644 -0.0291518" quat="0.5 0.5 -0.5 -0.5" mesh="hip_left" material="hip_left_material"/>
+        <geom type="mesh" class="collision" pos="-0.0700343 -0.0303644 -0.0291518" quat="0.5 0.5 -0.5 -0.5" mesh="hip_left" material="hip_left_material"/>
         <!-- Part ac1 -->
-        <geom type="mesh" class="visual" pos="-0 -0.0125 0.0174" quat="0 -0.707107 -0.707107 0" mesh="ac1" material="ac1_material"/>
-        <geom type="mesh" class="collision" pos="-0 -0.0125 0.0174" quat="0 -0.707107 -0.707107 0" mesh="ac1" material="ac1_material"/>
+        <geom type="mesh" class="visual" pos="-0 -0.0125 0.0174" quat="0 -0.707107 -0.707107 -0" mesh="ac1" material="ac1_material"/>
+        <geom type="mesh" class="collision" pos="-0 -0.0125 0.0174" quat="0 -0.707107 -0.707107 -0" mesh="ac1" material="ac1_material"/>
         <!-- Link thigh_bottom -->
-        <body name="thigh_bottom" pos="-0.0174 -0.0302 -0.0197" quat="0.5 0.5 0.5 0.5">
+        <body name="thigh_bottom" pos="-0.0174 -0.0302 -0.0267" quat="0.5 0.5 0.5 0.5">
           <!-- Joint from hip_left to thigh_bottom -->
-          <joint axis="0 0 1" name="joint_hip_left" type="hinge"/>
-          <inertial pos="-0.0791081 3.58799e-05 0.0170645" mass="0.130441" fullinertia="3.96496e-05 0.000222117 0.000218434 1.34725e-07 1.6706e-06 6.31e-10"/>
+          <joint axis="0 0 1" name="joint_hip_left" type="hinge" range="-0.8726646259971861 0.8726646259971435"/>
+          <inertial pos="-0.104636 -1.43004e-05 0.016341" mass="0.0589105" fullinertia="8.49817e-06 5.8963e-05 5.97548e-05 1.529e-09 9.44975e-07 1.29e-10"/>
           <!-- Part thigh_top -->
-          <geom type="mesh" class="visual" pos="-0.000164441 -0.00245181 0.0866371" quat="0 -0 -1 -0" mesh="thigh_top" material="thigh_top_material"/>
-          <geom type="mesh" class="collision" pos="-0.000164441 -0.00245181 0.0866371" quat="0 -0 -1 -0" mesh="thigh_top" material="thigh_top_material"/>
+          <geom type="mesh" class="visual" pos="-0.000164441 -0.00245181 0.0865291" quat="0 0 1 -0" mesh="thigh_top" material="thigh_top_material"/>
+          <geom type="mesh" class="collision" pos="-0.000164441 -0.00245181 0.0865291" quat="0 0 1 -0" mesh="thigh_top" material="thigh_top_material"/>
           <!-- Part ac1_2 -->
           <geom type="mesh" class="visual" pos="-0.0125 0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
           <geom type="mesh" class="collision" pos="-0.0125 0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
           <!-- Part thigh_bottom -->
-          <geom type="mesh" class="visual" pos="-0.000164441 -0.00245181 -0.0526343" quat="0 0 -1 -0" mesh="thigh_bottom" material="thigh_bottom_material"/>
-          <geom type="mesh" class="collision" pos="-0.000164441 -0.00245181 -0.0526343" quat="0 0 -1 -0" mesh="thigh_bottom" material="thigh_bottom_material"/>
+          <geom type="mesh" class="visual" pos="-0.000164441 -0.00245181 -0.0526343" quat="0 -0 1 -0" mesh="thigh_bottom" material="thigh_bottom_material"/>
+          <geom type="mesh" class="collision" pos="-0.000164441 -0.00245181 -0.0526343" quat="0 -0 1 -0" mesh="thigh_bottom" material="thigh_bottom_material"/>
           <!-- Part ac2 -->
-          <geom type="mesh" class="visual" pos="-0.0125 -0 0.0509028" quat="1 -0 -0 0" mesh="ac2" material="ac2_material"/>
-          <geom type="mesh" class="collision" pos="-0.0125 -0 0.0509028" quat="1 -0 -0 0" mesh="ac2" material="ac2_material"/>
+          <geom type="mesh" class="visual" pos="-0.0125 0 0.0507948" quat="1 -0 -0 0" mesh="ac2" material="ac2_material"/>
+          <geom type="mesh" class="collision" pos="-0.0125 0 0.0507948" quat="1 -0 -0 0" mesh="ac2" material="ac2_material"/>
           <!-- Part main_4 -->
-          <geom type="mesh" class="visual" pos="-0.1129 -0 0.0174" quat="0 0 0.707107 0.707107" mesh="main" material="main_material"/>
-          <geom type="mesh" class="collision" pos="-0.1129 -0 0.0174" quat="0 0 0.707107 0.707107" mesh="main" material="main_material"/>
+          <geom type="mesh" class="visual" pos="-0.1129 -0 0.0164943" quat="0 0 -0.707107 -0.707107" mesh="main" material="main_material"/>
+          <geom type="mesh" class="collision" pos="-0.1129 -0 0.0164943" quat="0 0 -0.707107 -0.707107" mesh="main" material="main_material"/>
           <!-- Link lower_leg_link -->
-          <body name="lower_leg_link" pos="-0.1254 0.0174 0.0174" quat="0.0308436 0.0308436 0.706434 -0.706434">
+          <body name="lower_leg_link" pos="-0.1254 0.0174 0.0164943" quat="0.0308436 0.0308436 0.706434 -0.706434">
             <!-- Joint from thigh_bottom to lower_leg_link -->
-            <joint axis="0 0 1" name="joint_knee_left" type="hinge"/>
-            <inertial pos="0.0868061 -0.005806 0.0169572" mass="0.14798" fullinertia="9.10558e-05 0.000279888 0.000303823 2.58707e-05 -1.10698e-06 9.1756e-08"/>
+            <joint axis="0 0 1" name="joint_knee_left" type="hinge" range="-1.2217304763960457 1.0471975511965828"/>
+            <inertial pos="0 1.67e-10 0.0141849" mass="0.00391051" fullinertia="1.18481e-06 1.18481e-06 1.8651e-07 -0 -0 0"/>
             <!-- Part ac2_2 -->
-            <geom type="mesh" class="visual" pos="0 -0.0125 0.0509028" quat="0.707107 -0 0 0.707107" mesh="ac2" material="ac2_material"/>
-            <geom type="mesh" class="collision" pos="0 -0.0125 0.0509028" quat="0.707107 -0 0 0.707107" mesh="ac2" material="ac2_material"/>
+            <geom type="mesh" class="visual" pos="0 -0.0125 0.0507948" quat="0.707107 -0 -0 0.707107" mesh="ac2" material="ac2_material"/>
+            <geom type="mesh" class="collision" pos="0 -0.0125 0.0507948" quat="0.707107 -0 -0 0.707107" mesh="ac2" material="ac2_material"/>
             <!-- Part lower_leg_link -->
-            <geom type="mesh" class="visual" pos="0.000164441 -0.00245181 0.0866371" quat="1 -0 0 0" mesh="lower_leg_link" material="lower_leg_link_material"/>
-            <geom type="mesh" class="collision" pos="0.000164441 -0.00245181 0.0866371" quat="1 -0 0 0" mesh="lower_leg_link" material="lower_leg_link_material"/>
+            <geom type="mesh" class="visual" pos="0.000164441 -0.00245181 0.0865291" quat="1 -0 -0 0" mesh="lower_leg_link" material="lower_leg_link_material"/>
+            <geom type="mesh" class="collision" pos="0.000164441 -0.00245181 0.0865291" quat="1 -0 -0 0" mesh="lower_leg_link" material="lower_leg_link_material"/>
             <!-- Part ac1_3 -->
-            <geom type="mesh" class="visual" pos="-0.0125 0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
-            <geom type="mesh" class="collision" pos="-0.0125 0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
+            <geom type="mesh" class="visual" pos="-0.0125 -0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
+            <geom type="mesh" class="collision" pos="-0.0125 -0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
             <!-- Part foot_link -->
-            <geom type="mesh" class="visual" pos="-0.0230328 0.178486 -0.192325" quat="0.706434 -0.0308435 -0.706434 -0.0308435" mesh="foot_link" material="foot_link_material"/>
-            <geom type="mesh" class="collision" pos="-0.0230328 0.178486 -0.192325" quat="0.706434 -0.0308435 -0.706434 -0.0308435" mesh="foot_link" material="foot_link_material"/>
+            <geom type="mesh" class="visual" pos="-0.00682372 0.0145138 -0.0526343" quat="0 0.999048 -0.0436194 0" mesh="foot_link" material="foot_link_material"/>
+            <geom type="mesh" class="collision" pos="-0.00682372 0.0145138 -0.0526343" quat="0 0.999048 -0.0436194 0" mesh="foot_link" material="foot_link_material"/>
           </body>
         </body>
       </body>
       <!-- Link hip_right -->
-      <body name="hip_right" pos="0.0778325 -0.102802 0.135095" quat="0.707622 -7e-12 -0.706591 7e-12">
+      <body name="hip_right" pos="0.05696 -0.110707 0.133127" quat="0.707622 -7e-12 -0.706591 7e-12">
         <!-- Joint from base_link to hip_right -->
         <joint axis="0 0 1" name="joint_thigh_right" type="hinge"/>
-        <inertial pos="-0.0129028 8.57371e-05 0.0188034" mass="0.074851" fullinertia="1.3421e-05 2.13017e-05 2.19106e-05 -2.3758e-08 8.65877e-07 -5.754e-09"/>
+        <inertial pos="-0.0123598 8.21293e-05 0.0247369" mass="0.0781391" fullinertia="1.55681e-05 2.39732e-05 2.26781e-05 -2.0274e-08 1.89596e-06 -1.2598e-08"/>
         <!-- Part hip_right -->
-        <geom type="mesh" class="visual" pos="-0.0303644 0.0700343 -0.0751518" quat="0 0 -0.707107 -0.707107" mesh="hip_right" material="hip_right_material"/>
-        <geom type="mesh" class="collision" pos="-0.0303644 0.0700343 -0.0751518" quat="0 0 -0.707107 -0.707107" mesh="hip_right" material="hip_right_material"/>
+        <geom type="mesh" class="visual" pos="-0.0303644 0.0700343 -0.0821518" quat="0 -0 0.707107 0.707107" mesh="hip_right" material="hip_right_material"/>
+        <geom type="mesh" class="collision" pos="-0.0303644 0.0700343 -0.0821518" quat="0 -0 0.707107 0.707107" mesh="hip_right" material="hip_right_material"/>
         <!-- Part main_5 -->
-        <geom type="mesh" class="visual" pos="-0.0177 -0 0.0197" quat="0 0 -0.707107 -0.707107" mesh="main" material="main_material"/>
-        <geom type="mesh" class="collision" pos="-0.0177 -0 0.0197" quat="0 0 -0.707107 -0.707107" mesh="main" material="main_material"/>
+        <geom type="mesh" class="visual" pos="-0.0177 0 0.0267" quat="0 0 0.707107 0.707107" mesh="main" material="main_material"/>
+        <geom type="mesh" class="collision" pos="-0.0177 0 0.0267" quat="0 0 0.707107 0.707107" mesh="main" material="main_material"/>
         <!-- Part ac1_4 -->
-        <geom type="mesh" class="visual" pos="-0.0125 -0 -0.0174" quat="1 0 -0 -0" mesh="ac1" material="ac1_material"/>
-        <geom type="mesh" class="collision" pos="-0.0125 -0 -0.0174" quat="1 0 -0 -0" mesh="ac1" material="ac1_material"/>
+        <geom type="mesh" class="visual" pos="-0.0125 0 -0.0174" quat="1 -0 0 -0" mesh="ac1" material="ac1_material"/>
+        <geom type="mesh" class="collision" pos="-0.0125 0 -0.0174" quat="1 -0 0 -0" mesh="ac1" material="ac1_material"/>
         <!-- Link thigh_top -->
-        <body name="thigh_top" pos="-0.0302 0.0174 0.0197" quat="0.707107 0.707107 -0.00051517 0.00051517">
+        <body name="thigh_top" pos="-0.0302 0.0174 0.0267" quat="0.707107 0.707107 0 -0">
           <!-- Joint from hip_right to thigh_top -->
-          <joint axis="0 0 1" name="joint_hip_right" type="hinge"/>
-          <inertial pos="-0.0791081 3.58799e-05 0.0170645" mass="0.130441" fullinertia="3.96496e-05 0.000222117 0.000218434 1.34725e-07 1.6706e-06 6.31e-10"/>
+          <joint axis="0 0 1" name="joint_hip_right" type="hinge" range="-0.43633231299855574 0.43633231299860903"/>
+          <inertial pos="-0.104636 -1.43004e-05 0.016341" mass="0.0589105" fullinertia="8.49817e-06 5.8963e-05 5.97548e-05 1.529e-09 9.44975e-07 1.29e-10"/>
           <!-- Part ac1_5 -->
           <geom type="mesh" class="visual" pos="-0.0125 0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
           <geom type="mesh" class="collision" pos="-0.0125 0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
           <!-- Part thigh_top_2 -->
-          <geom type="mesh" class="visual" pos="-0.000164441 -0.00245181 0.0866371" quat="0 0 -1 -0" mesh="thigh_top" material="thigh_top_material"/>
-          <geom type="mesh" class="collision" pos="-0.000164441 -0.00245181 0.0866371" quat="0 0 -1 -0" mesh="thigh_top" material="thigh_top_material"/>
+          <geom type="mesh" class="visual" pos="-0.000164441 -0.00245181 0.0865291" quat="0 -0 -1 0" mesh="thigh_top" material="thigh_top_material"/>
+          <geom type="mesh" class="collision" pos="-0.000164441 -0.00245181 0.0865291" quat="0 -0 -1 0" mesh="thigh_top" material="thigh_top_material"/>
           <!-- Part main_6 -->
-          <geom type="mesh" class="visual" pos="-0.1129 0 0.0174" quat="0 0 -0.707107 -0.707107" mesh="main" material="main_material"/>
-          <geom type="mesh" class="collision" pos="-0.1129 0 0.0174" quat="0 0 -0.707107 -0.707107" mesh="main" material="main_material"/>
+          <geom type="mesh" class="visual" pos="-0.1129 -0 0.0164943" quat="0 0 -0.707107 -0.707107" mesh="main" material="main_material"/>
+          <geom type="mesh" class="collision" pos="-0.1129 -0 0.0164943" quat="0 0 -0.707107 -0.707107" mesh="main" material="main_material"/>
           <!-- Part ac2_3 -->
-          <geom type="mesh" class="visual" pos="-0.0125 -0 0.0509028" quat="1 0 0 0" mesh="ac2" material="ac2_material"/>
-          <geom type="mesh" class="collision" pos="-0.0125 -0 0.0509028" quat="1 0 0 0" mesh="ac2" material="ac2_material"/>
+          <geom type="mesh" class="visual" pos="-0.0125 -0 0.0507948" quat="1 0 0 -0" mesh="ac2" material="ac2_material"/>
+          <geom type="mesh" class="collision" pos="-0.0125 -0 0.0507948" quat="1 0 0 -0" mesh="ac2" material="ac2_material"/>
           <!-- Part thigh_bottom_2 -->
           <geom type="mesh" class="visual" pos="-0.000164441 -0.00245181 -0.0526343" quat="0 -0 1 0" mesh="thigh_bottom" material="thigh_bottom_material"/>
           <geom type="mesh" class="collision" pos="-0.000164441 -0.00245181 -0.0526343" quat="0 -0 1 0" mesh="thigh_bottom" material="thigh_bottom_material"/>
           <!-- Link lower_leg_link_2 -->
-          <body name="lower_leg_link_2" pos="-0.1254 0.0174 0.0174" quat="0.521334 0.521334 0.477714 -0.477714">
+          <body name="lower_leg_link_2" pos="-0.1254 0.0174 0.0164943" quat="0.521334 0.521334 0.477714 -0.477714">
             <!-- Joint from thigh_top to lower_leg_link_2 -->
-            <joint axis="0 0 1" name="joint_knee_right" type="hinge"/>
-            <inertial pos="-0.005806 -0.0868061 0.0169572" mass="0.14798" fullinertia="0.000279888 9.10558e-05 0.000303823 -2.58707e-05 9.1756e-08 1.10698e-06"/>
+            <joint axis="0 0 1" name="joint_knee_right" type="hinge" range="-1.2217304763959707 1.0471975511966578"/>
+            <inertial pos="0 1.67e-10 0.0141849" mass="0.00391051" fullinertia="1.18481e-06 1.18481e-06 1.8651e-07 -0 -0 0"/>
             <!-- Part ac2_4 -->
-            <geom type="mesh" class="visual" pos="-0.0125 -0 0.0509028" quat="1 -0 0 -0" mesh="ac2" material="ac2_material"/>
-            <geom type="mesh" class="collision" pos="-0.0125 -0 0.0509028" quat="1 -0 0 -0" mesh="ac2" material="ac2_material"/>
+            <geom type="mesh" class="visual" pos="-0.0125 0 0.0507948" quat="1 -0 -0 0" mesh="ac2" material="ac2_material"/>
+            <geom type="mesh" class="collision" pos="-0.0125 0 0.0507948" quat="1 -0 -0 0" mesh="ac2" material="ac2_material"/>
             <!-- Part lower_leg_link_2 -->
-            <geom type="mesh" class="visual" pos="-0.00245181 -0.000164441 0.0866371" quat="0.707107 -0 0 -0.707107" mesh="lower_leg_link" material="lower_leg_link_material"/>
-            <geom type="mesh" class="collision" pos="-0.00245181 -0.000164441 0.0866371" quat="0.707107 -0 0 -0.707107" mesh="lower_leg_link" material="lower_leg_link_material"/>
+            <geom type="mesh" class="visual" pos="-0.00245181 -0.000164441 0.0865291" quat="0.707107 -0 -0 -0.707107" mesh="lower_leg_link" material="lower_leg_link_material"/>
+            <geom type="mesh" class="collision" pos="-0.00245181 -0.000164441 0.0865291" quat="0.707107 -0 -0 -0.707107" mesh="lower_leg_link" material="lower_leg_link_material"/>
             <!-- Part ac1_6 -->
-            <geom type="mesh" class="visual" pos="-0.0125 -0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
-            <geom type="mesh" class="collision" pos="-0.0125 -0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
+            <geom type="mesh" class="visual" pos="-0.0125 0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
+            <geom type="mesh" class="collision" pos="-0.0125 0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
             <!-- Part foot_link_2 -->
-            <geom type="mesh" class="visual" pos="0.178486 0.0230328 -0.192325" quat="0.477714 -0.521334 -0.477714 -0.521334" mesh="foot_link" material="foot_link_material"/>
-            <geom type="mesh" class="collision" pos="0.178486 0.0230328 -0.192325" quat="0.477714 -0.521334 -0.477714 -0.521334" mesh="foot_link" material="foot_link_material"/>
+            <geom type="mesh" class="visual" pos="0.0145138 0.00732372 -0.0526343" quat="0 0.67559 -0.737277 0" mesh="foot_link" material="foot_link_material"/>
+            <geom type="mesh" class="collision" pos="0.0145138 0.00732372 -0.0526343" quat="0 0.67559 -0.737277 0" mesh="foot_link" material="foot_link_material"/>
           </body>
         </body>
       </body>
     </body>
   </worldbody>
   <asset>
-    <mesh file="base_link_cover.stl"/>
-    <mesh file="thigh_top.stl"/>
-    <mesh file="hip_left.stl"/>
-    <mesh file="base_link.stl"/>
-    <mesh file="hip_right.stl"/>
     <mesh file="ac1.stl"/>
-    <mesh file="lower_leg_link.stl"/>
+    <mesh file="foot_link.stl"/>
+    <mesh file="thigh_top.stl"/>
+    <mesh file="base_link.stl"/>
     <mesh file="main.stl"/>
     <mesh file="ac2.stl"/>
+    <mesh file="lower_leg_link.stl"/>
+    <mesh file="base_link_cover.stl"/>
     <mesh file="thigh_bottom.stl"/>
-    <mesh file="foot_link.stl"/>
+    <mesh file="hip_right.stl"/>
+    <mesh file="composite_part_1.stl"/>
+    <mesh file="eye_right.stl"/>
+    <mesh file="hip_left.stl"/>
     <material name="main_material" rgba="0.247059 0.247059 0.247059 1"/>
+    <material name="eye_right_material" rgba="0 0 0 1"/>
     <material name="base_link_material" rgba="0.615686 0.811765 0.929412 1"/>
-    <material name="base_link_cover_material" rgba="0.980392 0.713725 0.00392157 1"/>
+    <material name="base_link_cover_material" rgba="0.439216 0.47451 0.501961 0.94902"/>
+    <material name="composite_part_1_material" rgba="0.498039 0.498039 0.498039 1"/>
     <material name="hip_left_material" rgba="0.647059 0.647059 0.647059 1"/>
     <material name="ac1_material" rgba="0.960784 0.960784 0.964706 1"/>
-    <material name="thigh_top_material" rgba="0.615686 0.811765 0.929412 1"/>
-    <material name="thigh_bottom_material" rgba="0.615686 0.811765 0.929412 1"/>
+    <material name="thigh_top_material" rgba="0.647059 0.647059 0.647059 1"/>
+    <material name="thigh_bottom_material" rgba="0.647059 0.647059 0.647059 1"/>
     <material name="ac2_material" rgba="0.960784 0.960784 0.964706 1"/>
     <material name="lower_leg_link_material" rgba="0.615686 0.811765 0.929412 1"/>
     <material name="foot_link_material" rgba="0.647059 0.647059 0.647059 1"/>
@@ -168,11 +180,11 @@
   </asset>
   <actuator>
     <position class="Trotter" name="joint_thigh_left" joint="joint_thigh_left"/>
-    <position class="Trotter" name="joint_hip_left" joint="joint_hip_left"/>
-    <position class="Trotter" name="joint_knee_left" joint="joint_knee_left"/>
+    <position class="Trotter" name="joint_hip_left" joint="joint_hip_left" inheritrange="1"/>
+    <position class="Trotter" name="joint_knee_left" joint="joint_knee_left" inheritrange="1"/>
     <position class="Trotter" name="joint_thigh_right" joint="joint_thigh_right"/>
-    <position class="Trotter" name="joint_hip_right" joint="joint_hip_right"/>
-    <position class="Trotter" name="joint_knee_right" joint="joint_knee_right"/>
+    <position class="Trotter" name="joint_hip_right" joint="joint_hip_right" inheritrange="1"/>
+    <position class="Trotter" name="joint_knee_right" joint="joint_knee_right" inheritrange="1"/>
   </actuator>
   <equality/>
 </mujoco>
