@@ -18,7 +18,8 @@
   <worldbody>
     <!-- Link base_link -->
     <body name="base_link" pos="0 0 0.18" quat="1 0 0 0" childclass="Trotter">
-      <inertial pos="0.131805 -0.10005 0.17386" mass="0.66107" fullinertia="0.00190698 0.00318323 0.001894 -5.48331e-06 4.15359e-06 -4.10627e-05"/>
+      <inertial pos="0.131805 -0.100096 0.173903" mass="0.661855" fullinertia="0.00190925 0.00318529 0.00189617 -5.49175e-06 4.16156e-06 -3.99393e-05"/>
+      <freejoint name="base_link_freejoint"/> # Use this to fix base for testing stuff    
       <!-- Part main -->
       <geom type="mesh" class="visual" pos="0.07436 -0.0982068 0.133102" quat="0.500364 0.499636 -0.499636 -0.500364" mesh="main" material="main_material"/>
       <geom type="mesh" class="collision" pos="0.07436 -0.0982068 0.133102" quat="0.500364 0.499636 -0.499636 -0.500364" mesh="main" material="main_material"/>
@@ -58,7 +59,7 @@
         <body name="thigh_bottom" pos="-0.0174 -0.0302 -0.0267" quat="0.5 0.5 0.5 0.5">
           <!-- Joint from hip_left to thigh_bottom -->
           <joint axis="0 0 1" name="joint_hip_left" type="hinge" range="-0.8726646259971861 0.8726646259971435"/>
-          <inertial pos="-0.104636 -1.43004e-05 0.016341" mass="0.0589105" fullinertia="8.49817e-06 5.8963e-05 5.97548e-05 1.529e-09 9.44975e-07 1.29e-10"/>
+          <inertial pos="-0.0771632 2.64394e-06 0.016665" mass="0.132063" fullinertia="4.06032e-05 0.000234529 0.000230004 6.3617e-08 5.6804e-08 -4.52e-10"/>
           <!-- Part thigh_top -->
           <geom type="mesh" class="visual" pos="-0.000164441 -0.00245181 0.0865291" quat="0 0 1 -0" mesh="thigh_top" material="thigh_top_material"/>
           <geom type="mesh" class="collision" pos="-0.000164441 -0.00245181 0.0865291" quat="0 0 1 -0" mesh="thigh_top" material="thigh_top_material"/>
@@ -78,7 +79,7 @@
           <body name="lower_leg_link" pos="-0.1254 0.0174 0.0164943" quat="0.0308436 0.0308436 0.706434 -0.706434">
             <!-- Joint from thigh_bottom to lower_leg_link -->
             <joint axis="0 0 1" name="joint_knee_left" type="hinge" range="-1.2217304763960457 1.0471975511965828"/>
-            <inertial pos="0 1.67e-10 0.0141849" mass="0.00391051" fullinertia="1.18481e-06 1.18481e-06 1.8651e-07 -0 -0 0"/>
+            <inertial pos="0.082877 -0.00238468 0.0168524" mass="0.113681" fullinertia="4.36299e-05 0.000304345 0.000308171 1.4105e-05 -8.9551e-07 2.5774e-08"/>
             <!-- Part ac2_2 -->
             <geom type="mesh" class="visual" pos="0 -0.0125 0.0507948" quat="0.707107 -0 -0 0.707107" mesh="ac2" material="ac2_material"/>
             <geom type="mesh" class="collision" pos="0 -0.0125 0.0507948" quat="0.707107 -0 -0 0.707107" mesh="ac2" material="ac2_material"/>
@@ -111,8 +112,8 @@
         <!-- Link thigh_top -->
         <body name="thigh_top" pos="-0.0302 0.0174 0.0267" quat="0.707107 0.707107 0 -0">
           <!-- Joint from hip_right to thigh_top -->
-          <joint axis="0 0 1" name="joint_hip_right" type="hinge" range="-0.43633231299855574 0.43633231299860903"/>
-          <inertial pos="-0.104636 -1.43004e-05 0.016341" mass="0.0589105" fullinertia="8.49817e-06 5.8963e-05 5.97548e-05 1.529e-09 9.44975e-07 1.29e-10"/>
+          <joint axis="0 0 1" name="joint_hip_right" type="hinge" range="-0.8726646259971381 0.8726646259971914"/>
+          <inertial pos="-0.0771632 2.64394e-06 0.016665" mass="0.132063" fullinertia="4.06032e-05 0.000234529 0.000230004 6.3617e-08 5.6804e-08 -4.52e-10"/>
           <!-- Part ac1_5 -->
           <geom type="mesh" class="visual" pos="-0.0125 0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
           <geom type="mesh" class="collision" pos="-0.0125 0 0.0174" quat="0 1 0 0" mesh="ac1" material="ac1_material"/>
@@ -132,7 +133,7 @@
           <body name="lower_leg_link_2" pos="-0.1254 0.0174 0.0164943" quat="0.521334 0.521334 0.477714 -0.477714">
             <!-- Joint from thigh_top to lower_leg_link_2 -->
             <joint axis="0 0 1" name="joint_knee_right" type="hinge" range="-1.2217304763959707 1.0471975511966578"/>
-            <inertial pos="0 1.67e-10 0.0141849" mass="0.00391051" fullinertia="1.18481e-06 1.18481e-06 1.8651e-07 -0 -0 0"/>
+            <inertial pos="-0.00238468 -0.0827225 0.0168524" mass="0.113681" fullinertia="0.000302398 4.36299e-05 0.000306224 -1.40114e-05 2.5774e-08 8.9384e-07"/>
             <!-- Part ac2_4 -->
             <geom type="mesh" class="visual" pos="-0.0125 0 0.0507948" quat="1 -0 -0 0" mesh="ac2" material="ac2_material"/>
             <geom type="mesh" class="collision" pos="-0.0125 0 0.0507948" quat="1 -0 -0 0" mesh="ac2" material="ac2_material"/>
@@ -151,19 +152,19 @@
     </body>
   </worldbody>
   <asset>
-    <mesh file="ac1.stl"/>
-    <mesh file="foot_link.stl"/>
-    <mesh file="thigh_top.stl"/>
-    <mesh file="base_link.stl"/>
-    <mesh file="main.stl"/>
-    <mesh file="ac2.stl"/>
-    <mesh file="lower_leg_link.stl"/>
     <mesh file="base_link_cover.stl"/>
-    <mesh file="thigh_bottom.stl"/>
+    <mesh file="eye_right.stl"/>
+    <mesh file="foot_link.stl"/>
+    <mesh file="ac1.stl"/>
+    <mesh file="base_link.stl"/>
     <mesh file="hip_right.stl"/>
     <mesh file="composite_part_1.stl"/>
-    <mesh file="eye_right.stl"/>
+    <mesh file="main.stl"/>
+    <mesh file="thigh_top.stl"/>
+    <mesh file="lower_leg_link.stl"/>
     <mesh file="hip_left.stl"/>
+    <mesh file="thigh_bottom.stl"/>
+    <mesh file="ac2.stl"/>
     <material name="main_material" rgba="0.247059 0.247059 0.247059 1"/>
     <material name="eye_right_material" rgba="0 0 0 1"/>
     <material name="base_link_material" rgba="0.615686 0.811765 0.929412 1"/>
