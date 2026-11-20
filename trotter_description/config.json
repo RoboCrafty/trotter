@@ -1,0 +1,10 @@
+{
+    "url": "https://cad.onshape.com/documents/a4f0cff30b14ae6c86f211bc/w/55853913397410f7f5b32b59/e/bff423cda90c8e4ad5b2c08c",
+    "output_format": "mujoco",
+    "assets_directory": "assets",
+    "robot_name": "Trotter",
+    "use_collision_meshes": false,
+    "post_import_commands": [
+        "sed -i '' 's|<body name=\"base_link\" pos=\"0 0 0\"|<body name=\"base_link\" pos=\"0 0 0.18\"|' robot.xml"
+    ]
+}
