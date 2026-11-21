@@ -35,6 +35,7 @@ from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.curriculum_manager import CurriculumTermCfg
 from mjlab.managers.reward_manager import RewardTermCfg
+from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.managers.termination_manager import TerminationTermCfg
 from mjlab.sensor import (
     ContactMatch,
@@ -308,15 +309,15 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     cfg.rewards["body_ang_vel"].weight = -0.05
 
     # Feet: how high to lift each foot during a step, measured at the foot
-    # site (sole center). The recipe's 10 cm is for G1-sized legs. Measured on
-    # Trotter (V8): with the foot still roughly under the hip, the sole center
-    # rises ~5 cm at thigh -30/knee -60 deg and ~6.5 cm at the knee limit
-    # (-70 deg). With no ankle the foot tilts ~30 deg at that point, so its
-    # lowest edge rises less (2.5-4 cm). 5 cm asks for a clear, proper step
-    # without forcing the knee onto its limit every stride. More knee range in
-    # the CAD = higher steps possible.
+    # site (sole center). The recipe's 10 cm is for G1-sized legs. Trotter
+    # (V8), foot kept under the hip: bending the knee the human way (positive)
+    # lifts the sole at most ~3.4 cm (at the +60 deg limit), the bird way up
+    # to ~5-7 cm (see README). We ask for the human knee (knee_bird_bend
+    # below), so the target is 3 cm: reachable at ~+55 deg. A 5 cm target
+    # would be unreachable that way and push the knee onto its limit every
+    # stride. More human-side knee range in the CAD = higher steps possible.
     for name in ("foot_clearance", "foot_swing_height"):
-        cfg.rewards[name].params["target_height"] = 0.05
+        cfg.rewards[name].params["target_height"] = 0.03
     # The two terms work differently:
     #   foot_clearance: while a foot moves, cost = |height - target| * foot
     #       speed. Trotter's feet move slowly, so this stays small by nature.
@@ -370,6 +371,18 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     ##
     # Curriculum.
     ##
+    # Human-like knees: penalize bending them the bird way (negative angle;
+    # see trotter_mdp.knee_bird_bend). Policies so far swung the shin forward
+    # by 7-18 deg in every swing, because with this leg geometry that lifts
+    # the foot more per degree. At -4, checkpoint 1250's bird-knee gait pays
+    # ~0.36 per step (about a quarter of what air_time pays), so stepping with
+    # the human knee clearly wins; the human way costs nothing.
+    cfg.rewards["knee_bird_bend"] = RewardTermCfg(
+        func=trotter_mdp.knee_bird_bend,
+        weight=-4.0,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=(r"joint_knee_.*",))},
+    )
+
     # Keep the soles flat on the ground in stance (see trotter_mdp.foot_flat).
     # Checkpoint 2750 stood on the outer edges at ~12 deg: 2 x 0.043 x 5 =
     # 0.43 per step, about a fifth of what tracking pays.

@@ -14,6 +14,7 @@ import torch
 
 if TYPE_CHECKING:
     from mjlab.envs import ManagerBasedRlEnv
+    from mjlab.managers.scene_entity_config import SceneEntityCfg
     from mjlab.managers.curriculum_manager import CurriculumTermCfg
 
 
@@ -128,3 +129,17 @@ def feet_air_time_grounded(env: ManagerBasedRlEnv, sensor_name: str, **kwargs) -
     reward = feet_air_time(env, sensor_name, **kwargs)
     grounded = (env.scene[sensor_name].data.current_contact_time > 0.0).any(dim=1)
     return reward * grounded.float()
+
+
+def knee_bird_bend(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """Penalize bending the knees the "bird" way (negative angle).
+
+    Positive knee angles swing the shin backward like a human knee; negative
+    ones swing it forward. With Trotter's geometry the bird way lifts the
+    foot more per degree (see README), so policies use it unless told not
+    to. Cost = sum over knees of how far they bend the bird way [rad], e.g.
+    20 deg costs 0.35; any amount the human way costs nothing. Linear, not
+    squared: a squared cost made small and medium bird bends nearly free.
+    """
+    knee = env.scene[asset_cfg.name].data.joint_pos[:, asset_cfg.joint_ids]
+    return torch.sum(torch.clamp(-knee, min=0.0), dim=1)
