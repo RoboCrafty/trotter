@@ -347,6 +347,15 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     ##
     # Curriculum.
     ##
+    # Keep the soles flat on the ground in stance (see trotter_mdp.foot_flat).
+    # Checkpoint 2750 stood on the outer edges at ~12 deg: 2 x 0.043 x 5 =
+    # 0.43 per step, about a fifth of what tracking pays.
+    cfg.rewards["foot_flat"] = RewardTermCfg(
+        func=trotter_mdp.foot_flat,
+        weight=-5.0,
+        params={"sensor_name": feet_ground.name, "foot_geoms": FOOT_GEOMS},
+    )
+
     # A curriculum changes the task during training, from easy to hard.
     # The recipe's two curricula don't fit: one raises the command speed up to
     # 3 m/s, the other makes rough terrain harder (we're on flat ground).
@@ -367,6 +376,25 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     def scaled(factor: float) -> dict[str, tuple[float, float]]:
         return {k: (lo * factor, hi * factor) for k, (lo, hi) in full_push.items()}
 
+    # Smoothness: raise the action_rate_l2 penalty step by step (recipe: -0.1).
+    # Policies so far chattered (actions flipping every step, ~20% of the
+    # time at the torque limit), which would cook the real servos. Starting
+    # strong instead makes a fresh policy afraid to move at all, so it ramps:
+    # walking is learned first, smoothness is squeezed in after. Meant for
+    # fine-tuning a walking checkpoint with --agent.resume: the step counter
+    # restarts at 0 on resume, so the ramp starts when the fine-tune does.
+    cfg.curriculum["action_rate_ramp"] = CurriculumTermCfg(
+        func=mdp.reward_curriculum,
+        params={
+            "reward_name": "action_rate_l2",
+            "stages": [
+                {"step": 0, "weight": -0.1},
+                {"step": 250 * 24, "weight": -0.3},
+                {"step": 500 * 24, "weight": -0.6},
+                {"step": 1000 * 24, "weight": -1.0},
+            ],
+        },
+    )
     cfg.curriculum["push_strength"] = CurriculumTermCfg(
         func=trotter_mdp.event_curriculum,
         params={

@@ -140,3 +140,47 @@ def calm_base(env: ManagerBasedRlEnv, std: float) -> torch.Tensor:
     """
     ang_vel_xy = env.scene["robot"].data.root_link_ang_vel_b[:, :2]
     return torch.exp(-torch.sum(torch.square(ang_vel_xy), dim=1) / std**2)
+
+
+class foot_flat:
+    """Penalize a tilted sole while the foot is on the ground.
+
+    Cost per foot in contact = sin^2(tilt), where tilt is the angle between
+    the sole's normal and straight up (12 deg -> 0.043). Trotter has no ankle,
+    so a foot can only be flat when its leg is vertical: this also stops the
+    knock-kneed stance checkpoint 2750 learned (hip roll ~12 deg inward, feet
+    4.5 cm from the center instead of 10, standing on their outer edges).
+
+    The sole normal is measured once, in each foot body's own frame, at the
+    default pose (all joints 0, where the soles are flat on the ground).
+    """
+
+    def __init__(self, cfg, env: ManagerBasedRlEnv):
+        import mujoco
+
+        from trotter_rl.robot.trotter_constants import get_spec
+
+        model = get_spec().compile()
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+        robot = env.scene["robot"]
+        self._body_ids, normals = [], []
+        for geom in cfg.params["foot_geoms"]:
+            body = model.geom_bodyid[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom)]
+            name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body)
+            self._body_ids.append(robot.body_names.index(name))
+            # World "up" expressed in the foot body's frame at the default pose.
+            normals.append(data.xmat[body].reshape(3, 3).T @ [0.0, 0.0, 1.0])
+        self._normals_b = torch.tensor(normals, dtype=torch.float32, device=env.device)
+
+    def __call__(
+        self, env: ManagerBasedRlEnv, sensor_name: str, foot_geoms: tuple[str, ...]
+    ) -> torch.Tensor:
+        del foot_geoms  # Used in __init__.
+        from mjlab.utils.lab_api.math import quat_apply
+
+        quat = env.scene["robot"].data.body_link_quat_w[:, self._body_ids]  # [N, 2, 4]
+        normal_w = quat_apply(quat, self._normals_b.expand(quat.shape[0], -1, -1))
+        sin2_tilt = torch.sum(torch.square(normal_w[..., :2]), dim=-1)  # [N, 2]
+        in_contact = env.scene[sensor_name].data.current_contact_time > 0.0
+        return torch.sum(sin2_tilt * in_contact, dim=1)
