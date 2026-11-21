@@ -1,0 +1,29 @@
+[build-system]
+requires = ["uv_build>=0.8.19,<0.9.0"]
+build-backend = "uv_build"
+
+[project]
+name = "trotter-rl"
+version = "0.1.0"
+description = "RL training environments for the Trotter biped, built on mjlab"
+# Same Python and mjlab pins as microduck_rl, which is known to work on this machine.
+requires-python = ">=3.12, <3.13"
+dependencies = [
+    "mjlab==1.3.0",
+    # mjlab 1.3.0 imports scipy but doesn't declare it as a dependency.
+    "scipy>=1.16",
+    # Used later to run exported policies (sim2sim / real robot).
+    "onnxruntime>=1.24.4",
+    # mjlab 1.3.0 doesn't cap these, and newer releases break it (e.g.
+    # mujoco-warp 3.9.1 removed `ls_parallel`, which mjlab still sets). Pinned
+    # to the versions microduck_rl runs with mjlab 1.3.0.
+    "mujoco==3.10.0",
+    "mujoco-warp==3.8.1",
+    "warp-lang==1.12.0",
+    "torch==2.9.1",
+]
+
+# Tells mjlab where our tasks are: on startup, mjlab imports every package in
+# this group, so `trotter_rl.tasks` runs its register_mjlab_task(...) calls.
+[project.entry-points."mjlab.tasks"]
+trotter_rl = "trotter_rl.tasks"

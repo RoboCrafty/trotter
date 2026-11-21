@@ -1,1 +1,20 @@
+# Secrets (Onshape API keys)
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Training outputs (checkpoints, logs, videos, exported policies)
+logs/
+wandb/
+outputs/
+videos/
+*.onnx
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
