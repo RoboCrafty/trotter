@@ -17,17 +17,24 @@ viewer's own keys still work in its window (Enter = reset, P = plots, ...).
 Run (macOS needs mjpython for the native viewer):
 
     uv run mjpython scripts/play_keyboard.py model_2400.pt
+
+Add --foxglove to also stream to Foxglove (connect to ws://localhost:8765):
+joint states, policy actions, the command, base state, foot contacts, and
+two cameras (the robot's head camera and one following the robot).
 """
 
 import argparse
+import io
 import os
 import select
 import sys
 import termios
 import threading
+import time
 import tty
 from dataclasses import asdict
 
+import mujoco
 import torch
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
@@ -102,10 +109,130 @@ class KeyboardCommand:
               f"yaw {c['yaw']:+.2f} rad/s     ", end="", flush=True)
 
 
+class FoxgloveStreamer:
+    """Publishes the robot's state and two camera images to Foxglove.
+
+    JSON topics (every policy step, 50 Hz):
+        /joint_states   name, position, velocity, effort (torque), target
+        /policy/action  the raw policy output (before scaling)
+        /command        the velocity command
+        /base           position, orientation, velocities, projected gravity
+        /feet           ground contact and height per foot
+    Image topics (every `camera_every` steps, ~17 Hz), JPEG:
+        /camera/head    the robot's own head camera (on the base front)
+        /camera/follow  a camera that follows the robot
+    """
+
+    def __init__(self, env, camera_every: int = 3, width: int = 320, height: int = 240):
+        import foxglove
+
+        self._foxglove = foxglove
+        self._env = env.unwrapped
+        self._robot = self._env.scene["robot"]
+        self._contact = self._env.scene["feet_ground_contact"]
+        self._feet = [self._robot.site_names.index(s) for s in ("left_foot", "right_foot")]
+        self._camera_every, self._size = camera_every, (height, width)
+        self._step = 0
+        # Our own MjData copy for rendering: the simulation's data lives in
+        # batched (Warp) arrays, so each frame copies robot 0's state over.
+        self._model = self._env.sim.mj_model
+        self._data = mujoco.MjData(self._model)
+        self._renderer = None  # Created on first use, in the simulation thread.
+        self._head_cam = self._find(mujoco.mjtObj.mjOBJ_CAMERA, "head_camera")
+        self._follow_cam = mujoco.MjvCamera()
+        self._follow_cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+        self._follow_cam.trackbodyid = self._find(mujoco.mjtObj.mjOBJ_BODY, "base_link")
+        self._follow_cam.distance, self._follow_cam.elevation = 0.9, -20.0
+        self._channels = {}  # topic -> foxglove.Channel, created on first log
+        foxglove.start_server(name="trotter")
+        print("Foxglove: connect to ws://localhost:8765")
+
+    def _find(self, obj_type, name: str) -> int:
+        # mjlab prefixes entity element names (e.g. "robot/head_camera").
+        for i in range(self._model.nbody if obj_type == mujoco.mjtObj.mjOBJ_BODY else self._model.ncam):
+            full = mujoco.mj_id2name(self._model, obj_type, i) or ""
+            if full == name or full.endswith("/" + name):
+                return i
+        raise KeyError(name)
+
+    @staticmethod
+    def _schema(value):
+        """JSON schema for a value, so Foxglove can show the message's fields.
+
+        Logging a plain dict creates a channel without a schema, which
+        Foxglove can't expand. So each channel gets one, built from its first
+        message.
+        """
+        if isinstance(value, dict):
+            props = {k: FoxgloveStreamer._schema(v) for k, v in value.items()}
+            return {"type": "object", "properties": props}
+        if isinstance(value, list):
+            return {"type": "array", "items": FoxgloveStreamer._schema(value[0]) if value else {}}
+        if isinstance(value, bool):
+            return {"type": "boolean"}
+        if isinstance(value, (int, float)):
+            return {"type": "number"}
+        return {"type": "string"}
+
+    def _log(self, topic: str, message: dict) -> None:
+        if topic not in self._channels:
+            self._channels[topic] = self._foxglove.Channel(
+                topic, schema=self._schema(message), message_encoding="json"
+            )
+        self._channels[topic].log(message)
+
+    def publish(self, action: torch.Tensor, command: list[float]) -> None:
+        log, r = self._log, self._robot.data
+        log("/joint_states", {
+            "name": list(self._robot.joint_names),
+            "position": r.joint_pos[0].tolist(),
+            "velocity": r.joint_vel[0].tolist(),
+            "effort": r.actuator_force[0].tolist(),
+            "target": r.joint_pos_target[0].tolist(),
+        })
+        log("/policy/action", {"action": action[0].tolist()})
+        log("/command", dict(zip(("lin_vel_x", "lin_vel_y", "ang_vel_z"), command)))
+        log("/base", {
+            "position": r.root_link_pos_w[0].tolist(),
+            "quaternion_wxyz": r.root_link_quat_w[0].tolist(),
+            "lin_vel_body": r.root_link_lin_vel_b[0].tolist(),
+            "ang_vel_body": r.root_link_ang_vel_b[0].tolist(),
+            "projected_gravity": r.projected_gravity_b[0].tolist(),
+        })
+        log("/feet", {
+            "contact": (self._contact.data.found[0, :2] > 0).tolist(),
+            "height": r.site_pos_w[0, self._feet, 2].tolist(),
+        })
+        if self._step % self._camera_every == 0:
+            self._publish_cameras()
+        self._step += 1
+
+    def _publish_cameras(self) -> None:
+        from foxglove.messages import CompressedImage, Timestamp
+        from PIL import Image
+
+        if self._renderer is None:
+            self._renderer = mujoco.Renderer(self._model, *self._size)
+        sim = self._env.sim.data
+        self._data.qpos[:] = sim.qpos[0].cpu().numpy()
+        self._data.qvel[:] = sim.qvel[0].cpu().numpy()
+        mujoco.mj_forward(self._model, self._data)
+        now = time.time_ns()
+        stamp = Timestamp(now // 1_000_000_000, now % 1_000_000_000)
+        for topic, camera in (("/camera/head", self._head_cam), ("/camera/follow", self._follow_cam)):
+            self._renderer.update_scene(self._data, camera=camera)
+            buffer = io.BytesIO()
+            Image.fromarray(self._renderer.render()).save(buffer, format="JPEG", quality=80)
+            self._foxglove.log(topic, CompressedImage(
+                timestamp=stamp, frame_id=topic.split("/")[-1], data=buffer.getvalue(), format="jpeg"
+            ))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("checkpoint", help="path to a model_<N>.pt file")
     parser.add_argument("--task", default="Trotter-Velocity-Flat")
+    parser.add_argument("--foxglove", action="store_true", help="stream to Foxglove")
     args = parser.parse_args()
 
     # Same env as `play` (infinite episodes, no pushes), with one robot whose
@@ -126,14 +253,19 @@ def main():
     runner.load(args.checkpoint, load_cfg={"actor": True}, strict=True, map_location="cpu")
     policy = runner.get_inference_policy(device="cpu")
 
+    streamer = FoxgloveStreamer(env) if args.foxglove else None
     keyboard = KeyboardCommand()
     twist = env.unwrapped.command_manager.get_term("twist")
 
     def keyboard_policy(obs):
         # Write the keyboard command into the env before every step. The
         # policy sees it in its next observation (one 20 ms step later).
-        twist.vel_command_b[:] = torch.tensor(keyboard.get())
-        return policy(obs)
+        command = keyboard.get()
+        twist.vel_command_b[:] = torch.tensor(command)
+        action = policy(obs)
+        if streamer is not None:
+            streamer.publish(action, command)
+        return action
 
     print(__doc__.split("\n\n")[2])  # The key list.
     try:

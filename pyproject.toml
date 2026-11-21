@@ -24,6 +24,7 @@ dependencies = [
     # rsl_rl 5.0.1 passes wandb.Settings(start_method=...), which newer wandb
     # (e.g. 0.31) rejects. 0.24.0 is what microduck_rl uses.
     "wandb==0.24.0",
+    "foxglove-sdk==0.31.0",
 ]
 
 # Tells mjlab where our tasks are: on startup, mjlab imports every package in

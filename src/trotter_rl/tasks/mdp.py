@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import torch
 
 if TYPE_CHECKING:
@@ -99,7 +100,7 @@ class foot_flat:
             self._body_ids.append(robot.body_names.index(name))
             # World "up" expressed in the foot body's frame at the default pose.
             normals.append(data.xmat[body].reshape(3, 3).T @ [0.0, 0.0, 1.0])
-        self._normals_b = torch.tensor(normals, dtype=torch.float32, device=env.device)
+        self._normals_b = torch.tensor(np.array(normals), dtype=torch.float32, device=env.device)
 
     def __call__(
         self, env: ManagerBasedRlEnv, sensor_name: str, foot_geoms: tuple[str, ...]
