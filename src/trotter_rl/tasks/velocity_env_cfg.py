@@ -250,8 +250,14 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # (0.5 m/s, 0.71 rad/s) are sized for big robots: with them, Trotter
     # standing still while commanded 0.2 m/s still earned 85% of the reward
     # (61% for a 0.5 rad/s turn), so checkpoint 650 learned to just stand.
-    # With std 0.1 m/s, standing still at a 0.2 m/s command earns 2%.
-    cfg.rewards["track_linear_velocity"].params["std"] = 0.1
+    # But 0.1 m/s is too strict: a 0.3 m/s error pays exp(-9) ~ 0, so the
+    # reward is flat unless the robot is already nearly on target, and PPO
+    # gets no hint which way to go. With the air_time reward paying for steps,
+    # checkpoint 850 (commit d6d0f77) settled on marching in place (vx ~0 for
+    # every command). Microduck's sqrt(0.1) = 0.32 m/s: marching in place at
+    # a 0.3 m/s command still earns 41%, tracking it earns 100%. Standing
+    # still no longer wins either, because air_time pays for stepping.
+    cfg.rewards["track_linear_velocity"].params["std"] = math.sqrt(0.1)
     # The angular term is exp(-(yaw error^2 + roll/pitch rates^2) / std^2):
     # turning only pays while the base isn't wobbling, which also discourages
     # jitter. At std 0.25 (checkpoint 2400) normal step wobble already killed
