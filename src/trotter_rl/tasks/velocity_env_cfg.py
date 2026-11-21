@@ -281,17 +281,26 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # on standing still.
     cfg.rewards["pose"].weight = 0.5
     cfg.rewards["pose"].params["std_standing"] = {".*": 0.05}
+    # The pose reward is exp(-mean(error^2 / std^2)) over all joints, so the
+    # stds decide which way of stepping is "cheap". With the old values
+    # (thigh 0.3, hip roll 0.15, knee 0.35) a proper 5 cm step (thigh -30,
+    # knee -60 deg) cost 0.43 per step, while swinging a straight leg 9 deg
+    # outward cost only 0.08. Checkpoint 3350 learned exactly that: the hip
+    # swung out 5-9 deg (up to 14) in every swing, knees nearly straight, a
+    # stiff "broken leg" walk with ~2 cm steps. Now the knee and thigh are
+    # free to bend (the high step costs 0.13) and hip roll is tight (the
+    # outward swing costs 0.24), so lifting with the knee is the cheap way.
     cfg.rewards["pose"].params["std_walking"] = {
-        r"joint_thigh_.*": 0.3,  # hip pitch: legs swing a lot when walking
-        r"joint_hip_.*": 0.15,  # hip roll: some sideways sway, not too much
-        r"joint_knee_.*": 0.35,  # knee: bends to lift the foot
+        r"joint_thigh_.*": 0.6,  # hip pitch: legs swing a lot when walking
+        r"joint_hip_.*": 0.08,  # hip roll: small sway only, no swinging out
+        r"joint_knee_.*": 1.0,  # knee: bends a lot to lift the foot
     }
     # "Running" kicks in above 1.5 m/s, which Trotter won't reach. It still has
     # to be set; use slightly looser values.
     cfg.rewards["pose"].params["std_running"] = {
-        r"joint_thigh_.*": 0.5,
-        r"joint_hip_.*": 0.2,
-        r"joint_knee_.*": 0.6,
+        r"joint_thigh_.*": 0.8,
+        r"joint_hip_.*": 0.12,
+        r"joint_knee_.*": 1.2,
     }
 
     # Penalize the base spinning/wobbling (helps a biped stay calm).
