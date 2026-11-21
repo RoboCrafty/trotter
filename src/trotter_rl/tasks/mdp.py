@@ -135,9 +135,8 @@ def knee_bird_bend(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> torch.T
     """Penalize bending the knees the "bird" way (negative angle).
 
     Positive knee angles swing the shin backward like a human knee; negative
-    ones swing it forward. With Trotter's geometry the bird way lifts the
-    foot more per degree (see README), so policies use it unless told not
-    to. Cost = sum over knees of how far they bend the bird way [rad], e.g.
+    ones swing it forward. On the V8 leg the bird way lifted the foot more
+    per degree (see README), so policies used it. Cost = sum over knees of how far they bend the bird way [rad], e.g.
     20 deg costs 0.35; any amount the human way costs nothing. Linear, not
     squared: a squared cost made small and medium bird bends nearly free.
     """

@@ -1,13 +1,13 @@
 {
     "configuration": "default",
     "documentId": "a4f0cff30b14ae6c86f211bc",
-    "documentMicroversion": "ba3a8fe03cae092b558b51b4",
+    "documentMicroversion": "d4d2e28753c3d8dcffbc1ff9",
     "elementId": "13148dd51f914f7241989d64",
     "fullConfiguration": "default",
     "id": "MtMPu3evmcjwMgsDv",
     "isStandardContent": false,
     "name": "eye_right <1>",
-    "partId": "RvCD",
+    "partId": "R1CD",
     "suppressed": false,
     "type": "Part"
 }
