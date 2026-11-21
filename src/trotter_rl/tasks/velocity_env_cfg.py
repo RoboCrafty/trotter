@@ -382,7 +382,22 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # A curriculum changes the task during training, from easy to hard.
     # The recipe's two curricula don't fit: one raises the command speed up to
     # 3 m/s, the other makes rough terrain harder (we're on flat ground).
-    cfg.curriculum.pop("command_vel")
+    # Speed curriculum: widen the command ranges once walking is learned
+    # (the recipe's stages go to 3 m/s, far past Trotter). Stage 0 is the
+    # range set in the commands section above. Physically, Trotter should top
+    # out around a brisk 0.6-0.8 m/s walk: the stride is short and the servos
+    # are slow (see STS3215_NO_LOAD_SPEED); running would need a flight phase
+    # the 1.9 N*m servos likely can't push off for. Where the tracking error
+    # stops improving after a stage, that's the real limit. Stages at 1000 and
+    # 3500: tracking at the base range plateaus by ~1000, and both sit 500
+    # iterations away from the push stages (500, 1500, 3000), so the task
+    # never gets harder in two ways at once. Counted from the start of the
+    # run (restarts on --agent.resume).
+    cfg.curriculum["command_vel"].params["velocity_stages"] = [
+        {"step": 0, "lin_vel_x": (-0.4, 0.4), "lin_vel_y": (-0.3, 0.3), "ang_vel_z": (-1.0, 1.0)},
+        {"step": 1000 * 24, "lin_vel_x": (-0.6, 0.6), "lin_vel_y": (-0.4, 0.4), "ang_vel_z": (-1.5, 1.5)},
+        {"step": 3500 * 24, "lin_vel_x": (-0.6, 0.8), "lin_vel_y": (-0.5, 0.5)},
+    ]
     cfg.curriculum.pop("terrain_levels")
 
     # Ours: ramp up the pushes. One PPO iteration = 24 env steps, so

@@ -22,7 +22,7 @@ from pathlib import Path
 import mujoco
 import numpy as np
 
-from mjlab.actuator import BuiltinPositionActuatorCfg
+from mjlab.actuator import DcMotorActuatorCfg
 from mjlab.entity import EntityArticulationInfoCfg, EntityCfg
 from mjlab.utils.spec_config import CollisionCfg
 
@@ -54,6 +54,7 @@ def get_spec() -> mujoco.MjSpec:
 
     _reframe_base(spec)
     _add_imu(spec)
+    _add_head_camera(spec)
     _name_collision_geoms(spec)
     _add_foot_sites(spec)
     return spec
@@ -125,6 +126,26 @@ def _reframe_base(spec: mujoco.MjSpec) -> None:
     base_quat = np.array(base.quat)
     base.pos = np.array(base.pos) + _rotate(base_quat, origin)
     base.quat = _quat_mul(base_quat, rot)
+
+
+def _add_head_camera(spec: mujoco.MjSpec) -> None:
+    """Add a forward-looking camera on the front of the base ("head_camera").
+
+    Like microduck's head camera: used for viewing/streaming only (cameras
+    don't affect the physics). It sits just in front of the base's front face
+    (x = 0.039 m in the base frame), 4 cm above the base origin.
+
+    A MuJoCo camera looks along its own -Z axis with +Y up. The quaternion
+    turns that into: looking along the base's +X (forward), +Z up.
+    """
+    if any(cam.name == "head_camera" for cam in spec.cameras):
+        return
+    # Columns: camera X (= base -Y, image right), Y (= base +Z, image up),
+    # Z (= base -X, so the camera looks along +X).
+    rot = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]], dtype=float)
+    quat = np.zeros(4)
+    mujoco.mju_mat2Quat(quat, rot.flatten())
+    spec.body("base_link").add_camera(name="head_camera", pos=[0.045, 0, 0.04], quat=quat, fovy=75)
 
 
 def _add_imu(spec: mujoco.MjSpec) -> None:
@@ -262,8 +283,8 @@ def _add_foot_sites(spec: mujoco.MjSpec) -> None:
 #
 #     torque = stiffness * (target_angle - angle) - damping * velocity
 #
-# clipped to +/- effort_limit. `BuiltinPositionActuatorCfg` creates exactly that
-# using MuJoCo's own <position> actuator.
+# clipped to the motor's torque limit. `DcMotorActuatorCfg` (below) computes
+# exactly that, with a speed-dependent torque limit like a real DC motor.
 #
 # The numbers below are reasonable first guesses, NOT measured values. Assumes
 # the 7.4V STS3215 (stall torque ~1.9 N*m). Getting these closer to the real
@@ -287,13 +308,22 @@ STS3215_DAMPING = 1.0
 STS3215_ARMATURE = 0.005
 # Constant friction torque [N*m] opposing motion (gearbox friction).
 STS3215_FRICTIONLOSS = 0.05
+# No-load speed [rad/s]: datasheet 0.222 s per 60 deg at 7.4 V.
+STS3215_NO_LOAD_SPEED = 4.7
 
-TROTTER_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
+# A DC motor model instead of a plain position servo: the same PD control,
+# but the available torque falls with speed, from the full 1.9 N*m when the
+# joint is still to zero at 4.7 rad/s (a real motor's torque-speed curve).
+# Without it, the simulated joints had no speed limit at all, so faster
+# commands could teach leg swings the real servo can't do.
+TROTTER_ACTUATOR_CFG = DcMotorActuatorCfg(
     # All six joints use the same servo, so one config covers all of them.
     target_names_expr=("joint_.*",),
     stiffness=STS3215_STIFFNESS,
     damping=STS3215_DAMPING,
     effort_limit=STS3215_EFFORT_LIMIT,
+    saturation_effort=STS3215_EFFORT_LIMIT,
+    velocity_limit=STS3215_NO_LOAD_SPEED,
     armature=STS3215_ARMATURE,
     frictionloss=STS3215_FRICTIONLOSS,
 )
