@@ -173,9 +173,10 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     assert isinstance(twist, UniformVelocityCommandCfg)
     twist.ranges.lin_vel_x = (-0.3, 0.3)
     twist.ranges.lin_vel_y = (-0.2, 0.2)
-    # Trotter has no hip yaw joint, so turning is the hardest part. Keep it
-    # modest for now.
-    twist.ranges.ang_vel_z = (-0.5, 0.5)
+    # Trotter has no hip yaw joint, so turning is the hardest part. Checkpoint
+    # 2400 tracked a 1.0 rad/s turn (0.9) but ignored 0.5, so it can turn;
+    # train on the wider range it's capable of.
+    twist.ranges.ang_vel_z = (-0.8, 0.8)
     twist.rel_standing_envs = 0.1
     # The recipe also has "heading" mode (the command is a direction to face,
     # converted into a turn rate) and "forward only" robots (meant for stairs).
@@ -294,12 +295,19 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     #       speed. Trotter's feet move slowly, so this stays small by nature.
     #   foot_swing_height: at each landing, cost = (peak height / target - 1)^2,
     #       e.g. a 2.5 cm step costs 0.25, a shuffle (no lift) costs 1.0.
-    # The recipe's swing weight (-0.25) is tuned for big robots; at that weight
-    # a shuffle costs Trotter almost nothing next to the tracking rewards.
-    # -1.0 makes real steps clearly worth it. (Both terms are only active when
-    # moving is commanded, and the strict tracking stds above mean standing
-    # still to avoid them costs far more than they do.)
-    cfg.rewards["foot_swing_height"].weight = -1.0
+    #
+    # How big these weights need to be: mjlab multiplies every term by the
+    # step time (0.02 s), so per second the tracking rewards pay up to ~2.0.
+    # foot_swing_height only fires at landings (~4 per second): at weight -1,
+    # shuffling with 2 cm steps cost ~0.03 per second, i.e. nothing, and
+    # checkpoint 2400 stepped only 1-2.5 cm high. At -10 the same shuffle costs
+    # ~0.3/s (~15% of the tracking reward), while 5 cm steps cost nothing.
+    # foot_clearance scales with foot speed, and Trotter's feet move slowly
+    # (~0.5 m/s in swing), so it also needs a bigger weight than the recipe's.
+    # (Both are only active when moving is commanded; standing still to avoid
+    # them loses far more tracking reward than they cost.)
+    cfg.rewards["foot_swing_height"].weight = -10.0
+    cfg.rewards["foot_clearance"].weight = -5.0
     for name in ("foot_clearance", "foot_slip"):
         cfg.rewards[name].params["asset_cfg"].site_names = FOOT_SITES
 
