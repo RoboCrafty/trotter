@@ -252,10 +252,16 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # 0.25 rad/s, ignoring a 0.5 rad/s turn earns 2%.
     cfg.rewards["track_linear_velocity"].params["std"] = 0.1
     cfg.rewards["track_angular_velocity"].params["std"] = 0.25
-    # mjlab's angular term also counts roll/pitch rates as error, and the
-    # side-to-side rocking of every step (~0.8 rad/s) drove it to ~1% for any
-    # real gait, so turning couldn't be learned. Swap in a yaw-only version.
+    # mjlab's angular term is exp(-(yaw error^2 + roll/pitch rates^2) / std^2):
+    # turning only pays while the base isn't wobbling. Split into two rewards
+    # so turning pays on its own (the 2400 policy barely turned) while the
+    # calm-base part, which kept that gait smooth, stays. Using the yaw-only
+    # term alone (commit 38afd75) brought the jitter back: action_rate went
+    # from -0.004 to -0.11.
     cfg.rewards["track_angular_velocity"].func = trotter_mdp.track_yaw_rate
+    cfg.rewards["calm_base"] = RewardTermCfg(
+        func=trotter_mdp.calm_base, weight=2.0, params={"std": 0.25}
+    )
 
     cfg.rewards["upright"].params["asset_cfg"].body_names = (BASE_BODY,)
 

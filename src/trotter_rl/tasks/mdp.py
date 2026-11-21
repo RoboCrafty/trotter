@@ -127,3 +127,16 @@ def track_yaw_rate(
     command = env.command_manager.get_command(command_name)
     yaw_error = torch.square(command[:, 2] - robot.data.root_link_ang_vel_b[:, 2])
     return torch.exp(-yaw_error / std**2)
+
+
+def calm_base(env: ManagerBasedRlEnv, std: float) -> torch.Tensor:
+    """Reward a calm base: no roll/pitch rotation speed.
+
+    Pays exp(-(roll_rate^2 + pitch_rate^2) / std^2). mjlab's
+    `track_angular_velocity` had this baked in as a factor (turning only paid
+    while the base wasn't wobbling), and that is what kept the 2400 gait
+    smooth. `track_yaw_rate` drops it so turning pays on its own; this term
+    gives the smoothness incentive back as a separate reward.
+    """
+    ang_vel_xy = env.scene["robot"].data.root_link_ang_vel_b[:, :2]
+    return torch.exp(-torch.sum(torch.square(ang_vel_xy), dim=1) / std**2)
