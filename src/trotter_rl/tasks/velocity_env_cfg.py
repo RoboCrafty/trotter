@@ -242,10 +242,25 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     #   foot_slip: don't drag feet on the ground.
     #   soft_landing: don't stomp.
 
+    # Velocity tracking. Each pays weight * exp(-error^2 / std^2): full reward
+    # for perfect tracking, falling off as the error grows. `std` sets how
+    # strict that is, and it MUST match the robot's speeds. The recipe's stds
+    # (0.5 m/s, 0.71 rad/s) are sized for big robots: with them, Trotter
+    # standing still while commanded 0.2 m/s still earned 85% of the reward
+    # (61% for a 0.5 rad/s turn), so checkpoint 650 learned to just stand.
+    # With std 0.1 m/s, standing still at a 0.2 m/s command earns 2%; with
+    # 0.25 rad/s, ignoring a 0.5 rad/s turn earns 2%.
+    cfg.rewards["track_linear_velocity"].params["std"] = 0.1
+    cfg.rewards["track_angular_velocity"].params["std"] = 0.25
+
     cfg.rewards["upright"].params["asset_cfg"].body_names = (BASE_BODY,)
 
     # Pose reward: allowed deviation (std, in rad) from the default pose.
     # Bigger = more freedom for that joint.
+    # Weight halved (recipe: 1.0): at full weight, the pose reward pays almost
+    # as much as tracking for simply not moving, which helped the policy settle
+    # on standing still.
+    cfg.rewards["pose"].weight = 0.5
     cfg.rewards["pose"].params["std_standing"] = {".*": 0.05}
     cfg.rewards["pose"].params["std_walking"] = {
         r"joint_thigh_.*": 0.3,  # hip pitch: legs swing a lot when walking
@@ -274,6 +289,17 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # the CAD = higher steps possible.
     for name in ("foot_clearance", "foot_swing_height"):
         cfg.rewards[name].params["target_height"] = 0.05
+    # The two terms work differently:
+    #   foot_clearance: while a foot moves, cost = |height - target| * foot
+    #       speed. Trotter's feet move slowly, so this stays small by nature.
+    #   foot_swing_height: at each landing, cost = (peak height / target - 1)^2,
+    #       e.g. a 2.5 cm step costs 0.25, a shuffle (no lift) costs 1.0.
+    # The recipe's swing weight (-0.25) is tuned for big robots; at that weight
+    # a shuffle costs Trotter almost nothing next to the tracking rewards.
+    # -1.0 makes real steps clearly worth it. (Both terms are only active when
+    # moving is commanded, and the strict tracking stds above mean standing
+    # still to avoid them costs far more than they do.)
+    cfg.rewards["foot_swing_height"].weight = -1.0
     for name in ("foot_clearance", "foot_slip"):
         cfg.rewards[name].params["asset_cfg"].site_names = FOOT_SITES
 
@@ -285,11 +311,16 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         params={"sensor_name": self_collision.name, "force_threshold": 2.0},
     )
 
-    # Recipe terms we don't use, removed so the config shows what's active.
-    # angular_momentum needs a sensor we don't have; air_time is off (weight 0)
-    # in the recipe's biped config too.
+    # Air time: +1 per step for each foot that's been in the air between 0.05
+    # and 0.4 s, i.e. a reward for actually taking steps. Only active when the
+    # robot is commanded to move (|lin vel| + |ang vel| > 0.05). The recipe's
+    # threshold (0.5) is above Trotter's top speed, so it would never switch on.
+    cfg.rewards["air_time"].weight = 0.5
+    cfg.rewards["air_time"].params["threshold_max"] = 0.4
+    cfg.rewards["air_time"].params["command_threshold"] = 0.05
+
+    # Recipe term we don't use: angular_momentum needs a sensor we don't have.
     cfg.rewards.pop("angular_momentum")
-    cfg.rewards.pop("air_time")
 
     ##
     # Terminations: when an episode ends early.

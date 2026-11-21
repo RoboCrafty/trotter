@@ -49,6 +49,11 @@ def trotter_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
             max_grad_norm=1.0,
         ),
         experiment_name="trotter_velocity",
+        wandb_project="mjlab_trotter",
+        # Don't upload checkpoints (.pt, ~4.4 MB each, one every save_interval)
+        # or exported .onnx files to wandb; metrics are still logged. The files
+        # stay on the training machine in logs/rsl_rl/trotter_velocity/.
+        upload_model=False,
         save_interval=50,
         num_steps_per_env=24,
         max_iterations=10_000,
