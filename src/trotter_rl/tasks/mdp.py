@@ -70,78 +70,6 @@ class event_curriculum:
         return {"stage": torch.tensor(float(self._current))}
 
 
-def feet_air_time_biped(
-    env: ManagerBasedRlEnv,
-    sensor_name: str,
-    command_name: str,
-    threshold: float = 0.4,
-    command_threshold: float = 0.05,
-) -> torch.Tensor:
-    """Reward a calm, alternating walk: one foot on the ground, one in the air.
-
-    Only pays in *single stance* (exactly one foot touching the ground). The
-    payout is the shorter of the two feet's current phase durations, i.e. how
-    long the swing foot has been in the air AND the stance foot on the ground,
-    capped at `threshold` seconds. So:
-
-        long, alternating steps    -> pays up to `threshold` per step
-        quick little shuffles      -> pays very little (phases are short)
-        both feet on the ground    -> pays 0
-        both feet in the air (hop) -> pays 0
-
-    This is the biped version used in Isaac Lab's humanoid tasks. mjlab's own
-    `feet_air_time` instead pays for every foot in the air, both at once
-    included, which Trotter exploited by hopping.
-
-    Only active while moving is commanded (standing still shouldn't step).
-    """
-    sensor = env.scene[sensor_name]
-    air_time = sensor.data.current_air_time  # [num_envs, 2] seconds in the air
-    contact_time = sensor.data.current_contact_time  # [num_envs, 2] seconds down
-    in_contact = contact_time > 0.0
-    # For each foot: how long it has been in its CURRENT phase.
-    phase_time = torch.where(in_contact, contact_time, air_time)
-    single_stance = in_contact.sum(dim=1) == 1
-    reward = torch.where(single_stance, phase_time.min(dim=1).values, 0.0)
-    reward = reward.clamp(max=threshold)
-
-    command = env.command_manager.get_command(command_name)
-    moving = (torch.norm(command[:, :2], dim=1) + command[:, 2].abs()) > command_threshold
-    return reward * moving.float()
-
-
-def track_yaw_rate(
-    env: ManagerBasedRlEnv,
-    std: float,
-    command_name: str,
-) -> torch.Tensor:
-    """Reward matching the commanded turn rate (yaw velocity) only.
-
-    mjlab's `track_angular_velocity` also counts the base's roll and pitch
-    rates as error. A biped rocks side to side with every step (~0.8 rad/s
-    on Trotter), which drove that reward to ~1% for any real gait, so turning
-    was never learned and tiny shuffles were favored. Rocking is already
-    penalized by `body_ang_vel` and `upright`; this term only cares about yaw.
-    """
-    robot = env.scene["robot"]
-    command = env.command_manager.get_command(command_name)
-    yaw_error = torch.square(command[:, 2] - robot.data.root_link_ang_vel_b[:, 2])
-    return torch.exp(-yaw_error / std**2)
-
-
-def calm_base(env: ManagerBasedRlEnv, std: float) -> torch.Tensor:
-    """Reward a calm base: no roll/pitch rotation speed.
-
-    Pays exp(-(roll_rate^2 + pitch_rate^2) / std^2). mjlab's
-    `track_angular_velocity` had this baked in as a factor (turning only paid
-    while the base wasn't wobbling), and that is what kept the 2400 gait
-    smooth. `track_yaw_rate` drops it so turning pays on its own; this term
-    gives the smoothness incentive back as a separate reward.
-    """
-    ang_vel_xy = env.scene["robot"].data.root_link_ang_vel_b[:, :2]
-    return torch.exp(-torch.sum(torch.square(ang_vel_xy), dim=1) / std**2)
-
-
 class foot_flat:
     """Penalize a tilted sole while the foot is on the ground.
 
@@ -184,3 +112,18 @@ class foot_flat:
         sin2_tilt = torch.sum(torch.square(normal_w[..., :2]), dim=-1)  # [N, 2]
         in_contact = env.scene[sensor_name].data.current_contact_time > 0.0
         return torch.sum(sin2_tilt * in_contact, dim=1)
+
+
+def feet_air_time_grounded(env: ManagerBasedRlEnv, sensor_name: str, **kwargs) -> torch.Tensor:
+    """mjlab's `feet_air_time`, but paying nothing while both feet are airborne.
+
+    mjlab's version pays per foot in the air, both at once included, which an
+    earlier Trotter run exploited by hopping. Walking always keeps one foot
+    down, so this changes nothing for a real gait. `kwargs` are passed through
+    (threshold_min, threshold_max, command_name, command_threshold).
+    """
+    from mjlab.tasks.velocity.mdp import feet_air_time
+
+    reward = feet_air_time(env, sensor_name, **kwargs)
+    grounded = (env.scene[sensor_name].data.current_contact_time > 0.0).any(dim=1)
+    return reward * grounded.float()

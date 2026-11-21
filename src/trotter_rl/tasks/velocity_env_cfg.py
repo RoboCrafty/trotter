@@ -168,14 +168,16 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # policy also learns to stand.
     #
     # The recipe's speeds are for robots like G1 (legs ~0.8 m, up to 1 m/s).
-    # Trotter's legs are ~0.3 m, so scale down: ~0.3 m/s is a brisk walk for it.
+    # Scaled down to what microduck (a similar-sized biped on mjlab 1.3.0)
+    # trains with. Checkpoint 2400 already went 0.35-0.41 m/s forward when
+    # commanded past its 0.3 training range. Turning up to 1.0 rad/s: with
+    # +-0.5, ignoring a turn command cost little, so turning wasn't learned
+    # (microduck saw the same: "ang +-1.0 makes turning learnable").
     twist = cfg.commands["twist"]
     assert isinstance(twist, UniformVelocityCommandCfg)
-    twist.ranges.lin_vel_x = (-0.3, 0.3)
-    twist.ranges.lin_vel_y = (-0.2, 0.2)
-    # Trotter has no hip yaw joint, so turning is the hardest part. Keep it
-    # modest for now.
-    twist.ranges.ang_vel_z = (-0.5, 0.5)
+    twist.ranges.lin_vel_x = (-0.4, 0.4)
+    twist.ranges.lin_vel_y = (-0.3, 0.3)
+    twist.ranges.ang_vel_z = (-1.0, 1.0)
     twist.rel_standing_envs = 0.1
     # The recipe also has "heading" mode (the command is a direction to face,
     # converted into a turn rate) and "forward only" robots (meant for stairs).
@@ -248,22 +250,23 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # (0.5 m/s, 0.71 rad/s) are sized for big robots: with them, Trotter
     # standing still while commanded 0.2 m/s still earned 85% of the reward
     # (61% for a 0.5 rad/s turn), so checkpoint 650 learned to just stand.
-    # With std 0.1 m/s, standing still at a 0.2 m/s command earns 2%; with
-    # 0.25 rad/s, ignoring a 0.5 rad/s turn earns 2%.
+    # With std 0.1 m/s, standing still at a 0.2 m/s command earns 2%.
     cfg.rewards["track_linear_velocity"].params["std"] = 0.1
-    cfg.rewards["track_angular_velocity"].params["std"] = 0.25
-    # mjlab's angular term is exp(-(yaw error^2 + roll/pitch rates^2) / std^2):
-    # turning only pays while the base isn't wobbling. Split into two rewards
-    # so turning pays on its own (the 2400 policy barely turned) while the
-    # calm-base part, which kept that gait smooth, stays. Using the yaw-only
-    # term alone (commit 38afd75) brought the jitter back: action_rate went
-    # from -0.004 to -0.11.
-    cfg.rewards["track_angular_velocity"].func = trotter_mdp.track_yaw_rate
-    cfg.rewards["calm_base"] = RewardTermCfg(
-        func=trotter_mdp.calm_base, weight=2.0, params={"std": 0.25}
-    )
+    # The angular term is exp(-(yaw error^2 + roll/pitch rates^2) / std^2):
+    # turning only pays while the base isn't wobbling, which also discourages
+    # jitter. At std 0.25 (checkpoint 2400) normal step wobble already killed
+    # it, so turning was barely learned; splitting it into yaw-only + a calm
+    # reward (commits 38afd75, 31be9b2) let the policy jitter instead. The
+    # recipe's 0.71 (also microduck's) with commands up to 1.0 rad/s: ignoring
+    # a 1.0 rad/s turn earns 13%, and 0.5 rad/s of wobble still keeps 61%.
+    cfg.rewards["track_angular_velocity"].params["std"] = math.sqrt(0.5)
 
+    # Upright: stronger and stricter than the recipe (1.0, std^2 0.2), as in
+    # microduck: a 4 deg lean then costs ~0.19 per step instead of ~0.05, so
+    # the body stays level instead of leaning into a shuffle.
     cfg.rewards["upright"].params["asset_cfg"].body_names = (BASE_BODY,)
+    cfg.rewards["upright"].weight = 2.0
+    cfg.rewards["upright"].params["std"] = math.sqrt(0.05)
 
     # Pose reward: allowed deviation (std, in rad) from the default pose.
     # Bigger = more freedom for that joint.
@@ -321,13 +324,18 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         params={"sensor_name": self_collision.name, "force_threshold": 2.0},
     )
 
-    # Air time: +1 per step for each foot that's been in the air between 0.05
-    # and 0.4 s, i.e. a reward for actually taking steps. Only active when the
-    # robot is commanded to move (|lin vel| + |ang vel| > 0.05). The recipe's
-    # threshold (0.5) is above Trotter's top speed, so it would never switch on.
-    cfg.rewards["air_time"].weight = 0.5
-    cfg.rewards["air_time"].params["threshold_max"] = 0.4
-    cfg.rewards["air_time"].params["command_threshold"] = 0.05
+    # Air time: +1 per step for each foot that's been in the air between
+    # 0.125 and 0.3 s, i.e. a reward for real steps. This is the main gait
+    # shaper in microduck (weight 3.0, same window). The 0.125 s minimum makes
+    # quick shuffles worthless (checkpoint 2750 took ~1 cm steps; the old
+    # 0.05 s minimum still paid for those). Only active when moving is
+    # commanded. Uses the grounded variant: nothing while both feet are in
+    # the air, so hopping doesn't pay double.
+    cfg.rewards["air_time"].func = trotter_mdp.feet_air_time_grounded
+    cfg.rewards["air_time"].weight = 3.0
+    cfg.rewards["air_time"].params["threshold_min"] = 0.125
+    cfg.rewards["air_time"].params["threshold_max"] = 0.3
+    cfg.rewards["air_time"].params["command_threshold"] = 0.01
 
     # Recipe term we don't use: angular_momentum needs a sensor we don't have.
     cfg.rewards.pop("angular_momentum")
@@ -380,18 +388,18 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # Policies so far chattered (actions flipping every step, ~20% of the
     # time at the torque limit), which would cook the real servos. Starting
     # strong instead makes a fresh policy afraid to move at all, so it ramps:
-    # walking is learned first, smoothness is squeezed in after. Meant for
-    # fine-tuning a walking checkpoint with --agent.resume: the step counter
-    # restarts at 0 on resume, so the ramp starts when the fine-tune does.
+    # walking is learned first, smoothness is squeezed in after. Same ramp as
+    # microduck (-1.0 by iteration 1500). Counted from the start of the run
+    # (on --agent.resume the counter restarts at 0, so the ramp restarts too).
     cfg.curriculum["action_rate_ramp"] = CurriculumTermCfg(
         func=mdp.reward_curriculum,
         params={
             "reward_name": "action_rate_l2",
             "stages": [
                 {"step": 0, "weight": -0.1},
-                {"step": 250 * 24, "weight": -0.3},
-                {"step": 500 * 24, "weight": -0.6},
-                {"step": 1000 * 24, "weight": -1.0},
+                {"step": 500 * 24, "weight": -0.3},
+                {"step": 1000 * 24, "weight": -0.6},
+                {"step": 1500 * 24, "weight": -1.0},
             ],
         },
     )
