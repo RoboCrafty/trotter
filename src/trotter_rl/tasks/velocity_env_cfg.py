@@ -259,6 +259,20 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # a 0.3 m/s command still earns 41%, tracking it earns 100%. Standing
     # still no longer wins either, because air_time pays for stepping.
     cfg.rewards["track_linear_velocity"].params["std"] = math.sqrt(0.1)
+    # ...but loose alone makes small commands not worth walking for: standing
+    # still at 0.1 m/s keeps 90% of it (loses only 0.2), less than walking
+    # costs in action_rate/foot/knee/pose penalties. V9 checkpoint 1000 still
+    # walked at 0.1-0.3 m/s and backward; by 3000, with the action_rate ramp
+    # at full weight, it froze below ~0.3 m/s, right where the break-even
+    # lands. A second, strict kernel (std 0.1) makes small errors matter:
+    # standing at 0.1 m/s now loses 0.2 + 0.63. The loose term still gives
+    # the direction from far away, so this doesn't bring back marching in
+    # place (checkpoint 850).
+    cfg.rewards["track_linear_velocity_fine"] = RewardTermCfg(
+        func=mdp.track_linear_velocity,
+        weight=1.0,
+        params={**cfg.rewards["track_linear_velocity"].params, "std": 0.1},
+    )
     # The angular term is exp(-(yaw error^2 + roll/pitch rates^2) / std^2):
     # turning only pays while the base isn't wobbling, which also discourages
     # jitter. At std 0.25 (checkpoint 2400) normal step wobble already killed
@@ -400,15 +414,16 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # out around a brisk 0.6-0.8 m/s walk: the stride is short and the servos
     # are slow (see STS3215_NO_LOAD_SPEED); running would need a flight phase
     # the 1.9 N*m servos likely can't push off for. Where the tracking error
-    # stops improving after a stage, that's the real limit. Stages at 1000 and
-    # 3500: tracking at the base range plateaus by ~1000, and both sit 500
+    # stops improving after a stage, that's the real limit. Stages at 2000 and
+    # 4000: widening at 1000 (V9 run) diluted the slow commands before slow
+    # walking was solid, and tracking got worse at each stage. Both sit 500
     # iterations away from the push stages (500, 1500, 3000), so the task
     # never gets harder in two ways at once. Counted from the start of the
     # run (restarts on --agent.resume).
     cfg.curriculum["command_vel"].params["velocity_stages"] = [
         {"step": 0, "lin_vel_x": (-0.4, 0.4), "lin_vel_y": (-0.3, 0.3), "ang_vel_z": (-1.0, 1.0)},
-        {"step": 1000 * 24, "lin_vel_x": (-0.6, 0.6), "lin_vel_y": (-0.4, 0.4), "ang_vel_z": (-1.5, 1.5)},
-        {"step": 3500 * 24, "lin_vel_x": (-0.6, 0.8), "lin_vel_y": (-0.5, 0.5)},
+        {"step": 2000 * 24, "lin_vel_x": (-0.6, 0.6), "lin_vel_y": (-0.4, 0.4), "ang_vel_z": (-1.5, 1.5)},
+        {"step": 4000 * 24, "lin_vel_x": (-0.6, 0.8), "lin_vel_y": (-0.5, 0.5)},
     ]
     cfg.curriculum.pop("terrain_levels")
 
