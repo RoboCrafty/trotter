@@ -330,6 +330,18 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # nearly free: checkpoint 700 fell ~2.4 times per second and kept going.
     cfg.rewards["termination"] = RewardTermCfg(func=mdp.is_terminated, weight=-200.0)
 
+    # Gait: reward long, alternating steps (one foot down, one in the air).
+    # Without this, nothing prefers a calm walk over bouncing: the iteration
+    # 150/300 checkpoints of the previous run took ~5 tiny steps per second
+    # per foot with both feet airborne ~45% of the time. Pays up to 0.4 per
+    # step (x weight 1.0), vs. up to 4 from the two tracking terms, so it
+    # shapes the gait without competing with following the command.
+    cfg.rewards["feet_air_time_biped"] = RewardTermCfg(
+        func=trotter_mdp.feet_air_time_biped,
+        weight=1.0,
+        params={"sensor_name": feet_ground.name, "command_name": "twist", "threshold": 0.4},
+    )
+
     # Removed:
     # - air_time: it pays +1 every step for each foot that's been in the air
     #   0.05-0.4 s, including BOTH feet at once, so hopping earns it nonstop.
