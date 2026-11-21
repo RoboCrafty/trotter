@@ -252,10 +252,17 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # (0.5 m/s, 0.71 rad/s) are sized for big robots: with them, Trotter
     # standing still while commanded 0.2 m/s still earned 85% of the reward
     # (61% for a 0.5 rad/s turn), so checkpoint 650 learned to just stand.
-    # With std 0.1 m/s, standing still at a 0.2 m/s command earns 2%; with
-    # 0.25 rad/s, ignoring a 0.5 rad/s turn earns 2%.
-    cfg.rewards["track_linear_velocity"].params["std"] = 0.1
-    cfg.rewards["track_angular_velocity"].params["std"] = 0.25
+    # But too strict is just as bad: with std 0.1 m/s (checkpoints 150/250)
+    # a 0.2 m/s error pays exp(-4) = 2%, so the reward is flat almost
+    # everywhere and PPO gets no hint which way to go. Those policies ignored
+    # the command and hopped/spun in place (tracking paid 0.06 per step vs.
+    # 0.97 for upright). Note the linear error also counts the base's
+    # VERTICAL velocity, so hopping alone already zeroes a strict term.
+    # Middle ground: with std 0.2 m/s, standing at a 0.2 m/s command earns
+    # 37% (0.3 m/s: 10%), and a 0.1 m/s vertical bob still keeps 78%. With
+    # 0.4 rad/s, ignoring a 0.5 rad/s turn earns 21% (0.8 rad/s: 2%).
+    cfg.rewards["track_linear_velocity"].params["std"] = 0.2
+    cfg.rewards["track_angular_velocity"].params["std"] = 0.4
 
     cfg.rewards["upright"].params["asset_cfg"].body_names = (BASE_BODY,)
 
@@ -310,9 +317,12 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # (Both are only active when moving is commanded; standing still to avoid
     # them loses far more tracking reward than they cost.)
     # -10 together with air_time (now removed) pushed checkpoint 700 into
-    # hopping; -5 still makes a 2 cm shuffle cost ~0.15/s.
-    cfg.rewards["foot_swing_height"].weight = -5.0
-    cfg.rewards["foot_clearance"].weight = -5.0
+    # hopping. At -5 each (checkpoints 150/250) the two foot terms cost 0.36
+    # per step, ~6x what tracking paid, and the policy hopped at 5 Hz to
+    # satisfy them. -2 keeps a real push toward lifting the feet without
+    # outweighing tracking.
+    cfg.rewards["foot_swing_height"].weight = -2.0
+    cfg.rewards["foot_clearance"].weight = -2.0
     for name in ("foot_clearance", "foot_slip"):
         cfg.rewards[name].params["asset_cfg"].site_names = FOOT_SITES
 
