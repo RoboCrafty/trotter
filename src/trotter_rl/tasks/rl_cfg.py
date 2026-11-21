@@ -20,7 +20,7 @@ def trotter_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
         actor=RslRlModelCfg(
             hidden_dims=(512, 256, 128),
             activation="elu",
-            obs_normalization=True,
+            obs_normalization=False,
             distribution_cfg={
                 "class_name": "GaussianDistribution",
                 "init_std": 1.0,
@@ -31,7 +31,7 @@ def trotter_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
         critic=RslRlModelCfg(
             hidden_dims=(512, 256, 128),
             activation="elu",
-            obs_normalization=True,
+            obs_normalization=False,
         ),
         algorithm=RslRlPpoAlgorithmCfg(
             value_loss_coef=1.0,

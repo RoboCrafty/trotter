@@ -108,3 +108,22 @@ def feet_air_time_biped(
     command = env.command_manager.get_command(command_name)
     moving = (torch.norm(command[:, :2], dim=1) + command[:, 2].abs()) > command_threshold
     return reward * moving.float()
+
+
+def track_yaw_rate(
+    env: ManagerBasedRlEnv,
+    std: float,
+    command_name: str,
+) -> torch.Tensor:
+    """Reward matching the commanded turn rate (yaw velocity) only.
+
+    mjlab's `track_angular_velocity` also counts the base's roll and pitch
+    rates as error. A biped rocks side to side with every step (~0.8 rad/s
+    on Trotter), which drove that reward to ~1% for any real gait, so turning
+    was never learned and tiny shuffles were favored. Rocking is already
+    penalized by `body_ang_vel` and `upright`; this term only cares about yaw.
+    """
+    robot = env.scene["robot"]
+    command = env.command_manager.get_command(command_name)
+    yaw_error = torch.square(command[:, 2] - robot.data.root_link_ang_vel_b[:, 2])
+    return torch.exp(-yaw_error / std**2)

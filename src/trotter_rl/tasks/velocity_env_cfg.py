@@ -143,10 +143,7 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     cfg.scene.sensors += (feet_ground, body_ground, self_collision)
 
     # Simulation buffer sizes. Copied from the recipe's flat-ground robots.
-    # njmax = room for constraints (contacts, joint limits) per robot. 300 ran
-    # out ("nefc overflow") when the robot flailed, which silently drops
-    # contacts.
-    cfg.sim.njmax = 500
+    cfg.sim.njmax = 300
     cfg.sim.nconmax = None
     cfg.sim.mujoco.ccd_iterations = 50
     cfg.sim.contact_sensor_maxmatch = 64
@@ -176,10 +173,9 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     assert isinstance(twist, UniformVelocityCommandCfg)
     twist.ranges.lin_vel_x = (-0.3, 0.3)
     twist.ranges.lin_vel_y = (-0.2, 0.2)
-    # Trotter has no hip yaw joint, so turning is the hardest part. Checkpoint
-    # 2400 tracked a 1.0 rad/s turn (0.9) but ignored 0.5, so it can turn;
-    # train on the wider range it's capable of.
-    twist.ranges.ang_vel_z = (-0.8, 0.8)
+    # Trotter has no hip yaw joint, so turning is the hardest part. Keep it
+    # modest for now.
+    twist.ranges.ang_vel_z = (-0.5, 0.5)
     twist.rel_standing_envs = 0.1
     # The recipe also has "heading" mode (the command is a direction to face,
     # converted into a turn rate) and "forward only" robots (meant for stairs).
@@ -252,17 +248,14 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # (0.5 m/s, 0.71 rad/s) are sized for big robots: with them, Trotter
     # standing still while commanded 0.2 m/s still earned 85% of the reward
     # (61% for a 0.5 rad/s turn), so checkpoint 650 learned to just stand.
-    # But too strict is just as bad: with std 0.1 m/s (checkpoints 150/250)
-    # a 0.2 m/s error pays exp(-4) = 2%, so the reward is flat almost
-    # everywhere and PPO gets no hint which way to go. Those policies ignored
-    # the command and hopped/spun in place (tracking paid 0.06 per step vs.
-    # 0.97 for upright). Note the linear error also counts the base's
-    # VERTICAL velocity, so hopping alone already zeroes a strict term.
-    # Middle ground: with std 0.2 m/s, standing at a 0.2 m/s command earns
-    # 37% (0.3 m/s: 10%), and a 0.1 m/s vertical bob still keeps 78%. With
-    # 0.4 rad/s, ignoring a 0.5 rad/s turn earns 21% (0.8 rad/s: 2%).
-    cfg.rewards["track_linear_velocity"].params["std"] = 0.2
-    cfg.rewards["track_angular_velocity"].params["std"] = 0.4
+    # With std 0.1 m/s, standing still at a 0.2 m/s command earns 2%; with
+    # 0.25 rad/s, ignoring a 0.5 rad/s turn earns 2%.
+    cfg.rewards["track_linear_velocity"].params["std"] = 0.1
+    cfg.rewards["track_angular_velocity"].params["std"] = 0.25
+    # mjlab's angular term also counts roll/pitch rates as error, and the
+    # side-to-side rocking of every step (~0.8 rad/s) drove it to ~1% for any
+    # real gait, so turning couldn't be learned. Swap in a yaw-only version.
+    cfg.rewards["track_angular_velocity"].func = trotter_mdp.track_yaw_rate
 
     cfg.rewards["upright"].params["asset_cfg"].body_names = (BASE_BODY,)
 
@@ -305,24 +298,12 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     #       speed. Trotter's feet move slowly, so this stays small by nature.
     #   foot_swing_height: at each landing, cost = (peak height / target - 1)^2,
     #       e.g. a 2.5 cm step costs 0.25, a shuffle (no lift) costs 1.0.
-    #
-    # How big these weights need to be: mjlab multiplies every term by the
-    # step time (0.02 s), so per second the tracking rewards pay up to ~2.0.
-    # foot_swing_height only fires at landings (~4 per second): at weight -1,
-    # shuffling with 2 cm steps cost ~0.03 per second, i.e. nothing, and
-    # checkpoint 2400 stepped only 1-2.5 cm high. At -10 the same shuffle costs
-    # ~0.3/s (~15% of the tracking reward), while 5 cm steps cost nothing.
-    # foot_clearance scales with foot speed, and Trotter's feet move slowly
-    # (~0.5 m/s in swing), so it also needs a bigger weight than the recipe's.
-    # (Both are only active when moving is commanded; standing still to avoid
-    # them loses far more tracking reward than they cost.)
-    # -10 together with air_time (now removed) pushed checkpoint 700 into
-    # hopping. At -5 each (checkpoints 150/250) the two foot terms cost 0.36
-    # per step, ~6x what tracking paid, and the policy hopped at 5 Hz to
-    # satisfy them. -2 keeps a real push toward lifting the feet without
-    # outweighing tracking.
-    cfg.rewards["foot_swing_height"].weight = -2.0
-    cfg.rewards["foot_clearance"].weight = -2.0
+    # The recipe's swing weight (-0.25) is tuned for big robots; at that weight
+    # a shuffle costs Trotter almost nothing next to the tracking rewards.
+    # -1.0 makes real steps clearly worth it. (Both terms are only active when
+    # moving is commanded, and the strict tracking stds above mean standing
+    # still to avoid them costs far more than they do.)
+    cfg.rewards["foot_swing_height"].weight = -1.0
     for name in ("foot_clearance", "foot_slip"):
         cfg.rewards[name].params["asset_cfg"].site_names = FOOT_SITES
 
@@ -334,31 +315,15 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         params={"sensor_name": self_collision.name, "force_threshold": 2.0},
     )
 
-    # Falling: a one-off penalty when an episode ends early (not on timeouts).
-    # Rewards are multiplied by the step time (0.02 s), so -200 costs 4 per
-    # fall, about 1-2 seconds' worth of reward. Before this, falling was
-    # nearly free: checkpoint 700 fell ~2.4 times per second and kept going.
-    cfg.rewards["termination"] = RewardTermCfg(func=mdp.is_terminated, weight=-200.0)
+    # Air time: +1 per step for each foot that's been in the air between 0.05
+    # and 0.4 s, i.e. a reward for actually taking steps. Only active when the
+    # robot is commanded to move (|lin vel| + |ang vel| > 0.05). The recipe's
+    # threshold (0.5) is above Trotter's top speed, so it would never switch on.
+    cfg.rewards["air_time"].weight = 0.5
+    cfg.rewards["air_time"].params["threshold_max"] = 0.4
+    cfg.rewards["air_time"].params["command_threshold"] = 0.05
 
-    # Gait: reward long, alternating steps (one foot down, one in the air).
-    # Without this, nothing prefers a calm walk over bouncing: the iteration
-    # 150/300 checkpoints of the previous run took ~5 tiny steps per second
-    # per foot with both feet airborne ~45% of the time. Pays up to 0.4 per
-    # step (x weight 1.0), vs. up to 4 from the two tracking terms, so it
-    # shapes the gait without competing with following the command.
-    cfg.rewards["feet_air_time_biped"] = RewardTermCfg(
-        func=trotter_mdp.feet_air_time_biped,
-        weight=1.0,
-        params={"sensor_name": feet_ground.name, "command_name": "twist", "threshold": 0.4},
-    )
-
-    # Removed:
-    # - air_time: it pays +1 every step for each foot that's been in the air
-    #   0.05-0.4 s, including BOTH feet at once, so hopping earns it nonstop.
-    #   Checkpoint 700 learned exactly that (both feet airborne 76% of the
-    #   time). mjlab's own G1 biped config keeps it off too.
-    # - angular_momentum: needs a sensor we don't have.
-    cfg.rewards.pop("air_time")
+    # Recipe term we don't use: angular_momentum needs a sensor we don't have.
     cfg.rewards.pop("angular_momentum")
 
     ##
