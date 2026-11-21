@@ -143,7 +143,10 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     cfg.scene.sensors += (feet_ground, body_ground, self_collision)
 
     # Simulation buffer sizes. Copied from the recipe's flat-ground robots.
-    cfg.sim.njmax = 300
+    # njmax = room for constraints (contacts, joint limits) per robot. 300 ran
+    # out ("nefc overflow") when the robot flailed, which silently drops
+    # contacts.
+    cfg.sim.njmax = 500
     cfg.sim.nconmax = None
     cfg.sim.mujoco.ccd_iterations = 50
     cfg.sim.contact_sensor_maxmatch = 64
@@ -306,7 +309,9 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # (~0.5 m/s in swing), so it also needs a bigger weight than the recipe's.
     # (Both are only active when moving is commanded; standing still to avoid
     # them loses far more tracking reward than they cost.)
-    cfg.rewards["foot_swing_height"].weight = -10.0
+    # -10 together with air_time (now removed) pushed checkpoint 700 into
+    # hopping; -5 still makes a 2 cm shuffle cost ~0.15/s.
+    cfg.rewards["foot_swing_height"].weight = -5.0
     cfg.rewards["foot_clearance"].weight = -5.0
     for name in ("foot_clearance", "foot_slip"):
         cfg.rewards[name].params["asset_cfg"].site_names = FOOT_SITES
@@ -319,15 +324,19 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         params={"sensor_name": self_collision.name, "force_threshold": 2.0},
     )
 
-    # Air time: +1 per step for each foot that's been in the air between 0.05
-    # and 0.4 s, i.e. a reward for actually taking steps. Only active when the
-    # robot is commanded to move (|lin vel| + |ang vel| > 0.05). The recipe's
-    # threshold (0.5) is above Trotter's top speed, so it would never switch on.
-    cfg.rewards["air_time"].weight = 0.5
-    cfg.rewards["air_time"].params["threshold_max"] = 0.4
-    cfg.rewards["air_time"].params["command_threshold"] = 0.05
+    # Falling: a one-off penalty when an episode ends early (not on timeouts).
+    # Rewards are multiplied by the step time (0.02 s), so -200 costs 4 per
+    # fall, about 1-2 seconds' worth of reward. Before this, falling was
+    # nearly free: checkpoint 700 fell ~2.4 times per second and kept going.
+    cfg.rewards["termination"] = RewardTermCfg(func=mdp.is_terminated, weight=-200.0)
 
-    # Recipe term we don't use: angular_momentum needs a sensor we don't have.
+    # Removed:
+    # - air_time: it pays +1 every step for each foot that's been in the air
+    #   0.05-0.4 s, including BOTH feet at once, so hopping earns it nonstop.
+    #   Checkpoint 700 learned exactly that (both feet airborne 76% of the
+    #   time). mjlab's own G1 biped config keeps it off too.
+    # - angular_momentum: needs a sensor we don't have.
+    cfg.rewards.pop("air_time")
     cfg.rewards.pop("angular_momentum")
 
     ##
