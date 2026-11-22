@@ -5,7 +5,7 @@
 #   sbatch train.slurm --agent.resume True \
 #       --agent.load-run <run folder> --agent.load-checkpoint model_<N>.pt
 #
-#   sbatch --export=ALL,TROTTER_VARIANT=lift7 train.slurm   # a sweep variant
+#   sbatch --export=ALL,TROTTER_VARIANT=max04 train.slurm   # a sweep variant
 #
 # Extra arguments are passed straight to `train`. Variants are defined at the
 # end of src/trotter_rl/tasks/velocity_env_cfg.py; the run folder gets the

@@ -44,7 +44,7 @@ from mjlab.viewer import NativeMujocoViewer
 import trotter_rl.tasks  # noqa: F401  (registers Trotter-Velocity-Flat)
 
 # Change per keypress, and the largest command allowed. The limits are well
-# past the training ranges (0.7 / 0.4 / 3.0)
+# past the training ranges (0.4 / 0.3 / 1.0)
 # on purpose: command anything and see what the policy does. Beyond what it
 # was trained on it can't follow, and may stumble or fall.
 STEP = {"x": 0.1, "y": 0.05, "yaw": 0.1}

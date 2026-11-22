@@ -175,14 +175,14 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # commanded past its 0.3 training range. Turning: with +-0.5, ignoring a
     # turn command cost little, so turning wasn't learned (microduck: "ang
     # +-1.0 makes turning learnable"); policies have turned near 3 rad/s.
-    # Fixed ranges from the start, no widening during training (see the
-    # curriculum section). The top of these ranges is likely past what the
-    # servos allow; it's there to explore faster speeds with longer strides.
+    # Fixed ranges, no widening during training (see the curriculum section).
+    # +-0.7 / +-0.4 / +-3.0 (sweep of 2026-11-22) was mostly out of reach:
+    # turning was ignored and the robot fell more.
     twist = cfg.commands["twist"]
     assert isinstance(twist, UniformVelocityCommandCfg)
-    twist.ranges.lin_vel_x = (-0.7, 0.7)
-    twist.ranges.lin_vel_y = (-0.4, 0.4)
-    twist.ranges.ang_vel_z = (-3.0, 3.0)
+    twist.ranges.lin_vel_x = (-0.4, 0.4)
+    twist.ranges.lin_vel_y = (-0.3, 0.3)
+    twist.ranges.ang_vel_z = (-1.0, 1.0)
     twist.rel_standing_envs = 0.1
     # The recipe also has "heading" mode (the command is a direction to face,
     # converted into a turn rate) and "forward only" robots (meant for stairs).
@@ -341,10 +341,11 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     #       e.g. a 2.5 cm step costs 0.25, a shuffle (no lift) costs 1.0.
     # The recipe's swing weight (-0.25) is tuned for big robots; at that weight
     # a shuffle costs Trotter almost nothing next to the tracking rewards.
-    # -1.0 got steps, but only ~2.5-3.5 cm high; -3.0 pushes toward the full
-    # 5 cm. (Both terms are only active when moving is commanded, and the
-    # tracking rewards mean standing still to avoid them costs far more.)
-    cfg.rewards["foot_swing_height"].weight = -3.0
+    # -1.0 makes real steps clearly worth it (-3.0 and a 7 cm target made no
+    # difference in the 2026-11-22 sweep). Both terms are only active when
+    # moving is commanded, and the tracking rewards mean standing still to
+    # avoid them costs far more.
+    cfg.rewards["foot_swing_height"].weight = -1.0
     for name in ("foot_clearance", "foot_slip"):
         cfg.rewards[name].params["asset_cfg"].site_names = FOOT_SITES
 
@@ -357,15 +358,18 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     )
 
     # Air time: +1 per step for each foot that's been in the air between
-    # 0.3 and 0.5 s, i.e. a reward for real steps. This is the main gait
-    # shaper in microduck (weight 3.0, window 0.125-0.3 s). With that window
-    # our policies took quick ~0.13 s steps with ~15 deg thigh swing; the
-    # 0.3 s minimum asks for fewer, longer, higher steps. Only active when moving is
+    # 0.125 and 0.5 s, i.e. a reward for real steps. This is the main gait
+    # shaper in microduck (weight 3.0, window 0.125-0.3 s). It pays every
+    # step the foot is up inside the window, so longer steps earn more, up to
+    # the maximum. With microduck's 0.3 s max our feet stayed up ~0.27 s:
+    # right at the cap. The 0.125 s minimum must stay reachable: at 0.2 or
+    # 0.3 s, young policies (~0.1 s steps) never earned anything from it and
+    # settled into fast hopping. Only active when moving is
     # commanded. Uses the grounded variant: nothing while both feet are in
     # the air, so hopping doesn't pay double.
     cfg.rewards["air_time"].func = trotter_mdp.feet_air_time_grounded
     cfg.rewards["air_time"].weight = 3.0
-    cfg.rewards["air_time"].params["threshold_min"] = 0.3
+    cfg.rewards["air_time"].params["threshold_min"] = 0.125
     cfg.rewards["air_time"].params["threshold_max"] = 0.5
     cfg.rewards["air_time"].params["command_threshold"] = 0.01
 
@@ -413,8 +417,9 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # The recipe's two curricula don't fit: one raises the command speed up to
     # 3 m/s, the other makes rough terrain harder (we're on flat ground).
     # No speed curriculum: the command ranges set above stay fixed. Widening
-    # them mid-run (at 1000, then at 2000/4000) made tracking worse at every
-    # stage, and the policy never recovered.
+    # them mid-run made tracking worse at every stage, and the policy never
+    # recovered (best run so far: tracking peaked at 1500, dropped after the
+    # widening at 2000, falls jumped after the one at 4000).
     cfg.curriculum.pop("command_vel")
     cfg.curriculum.pop("terrain_levels")
 
@@ -490,18 +495,6 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     return cfg
 
 
-def _set_action_rate_max(cfg: ManagerBasedRlEnvCfg, weight: float) -> None:
-    """Cap the action_rate ramp: the strong late smoothness penalty may be
-    what keeps steps short and quick (a big swing means big target changes)."""
-    stages = cfg.curriculum["action_rate_ramp"].params["stages"]
-    for stage in stages:
-        stage["weight"] = max(stage["weight"], weight)
-
-
-def _set_lift(cfg: ManagerBasedRlEnvCfg, height: float) -> None:
-    for name in ("foot_clearance", "foot_swing_height"):
-        cfg.rewards[name].params["target_height"] = height
-
 
 def _set_air_window(cfg: ManagerBasedRlEnvCfg, lo: float, hi: float) -> None:
     cfg.rewards["air_time"].params["threshold_min"] = lo
@@ -509,21 +502,26 @@ def _set_air_window(cfg: ManagerBasedRlEnvCfg, lo: float, hi: float) -> None:
 
 
 def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
-    """Sweep variants, each a change from the base config."""
-    twist = cfg.commands["twist"]
-    assert isinstance(twist, UniformVelocityCommandCfg)
-    if name == "air02":  # easier air-time window, in case 0.3 s is too hard early
-        _set_air_window(cfg, 0.2, 0.4)
-    elif name == "lift7":  # 7 cm steps
-        _set_lift(cfg, 0.07)
-    elif name == "lift7_smooth03":  # 7 cm steps, smoothness capped at -0.3
-        _set_lift(cfg, 0.07)
-        _set_action_rate_max(cfg, -0.3)
-    elif name == "smooth03":  # smoothness capped at -0.3
-        _set_action_rate_max(cfg, -0.3)
-    elif name == "slow":  # the old, reachable command ranges
-        twist.ranges.lin_vel_x = (-0.5, 0.5)
-        twist.ranges.lin_vel_y = (-0.3, 0.3)
-        twist.ranges.ang_vel_z = (-1.5, 1.5)
+    """Sweep variants, each a change from the base config (air time 0.125-0.5 s)."""
+    if name == "max04":
+        _set_air_window(cfg, 0.125, 0.4)
+    elif name == "max06":
+        _set_air_window(cfg, 0.125, 0.6)
+    elif name == "ramp":
+        # Move the window up as steps get longer, keeping the minimum below
+        # the steps the policy already takes. Stages sit away from the push
+        # stages (500, 1500, 3000).
+        cfg.curriculum["air_time_window"] = CurriculumTermCfg(
+            func=trotter_mdp.reward_param_curriculum,
+            params={
+                "reward_name": "air_time",
+                "stages": [
+                    {"step": 0, "params": {"threshold_min": 0.125, "threshold_max": 0.3}},
+                    {"step": 1000 * 24, "params": {"threshold_min": 0.15, "threshold_max": 0.4}},
+                    {"step": 2000 * 24, "params": {"threshold_min": 0.2, "threshold_max": 0.5}},
+                    {"step": 4000 * 24, "params": {"threshold_min": 0.25, "threshold_max": 0.6}},
+                ],
+            },
+        )
     else:
         raise ValueError(f"unknown TROTTER_VARIANT {name!r}")

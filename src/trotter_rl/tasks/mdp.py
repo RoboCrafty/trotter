@@ -72,6 +72,27 @@ class event_curriculum:
         return {"stage": torch.tensor(float(self._current))}
 
 
+class reward_param_curriculum(event_curriculum):
+    """Same as event_curriculum, for a reward term's params, e.g. an air-time
+    window that moves up as steps get longer:
+
+        params={"reward_name": "air_time", "stages": [
+            {"step": 0, "params": {"threshold_min": 0.125, "threshold_max": 0.3}}, ...]}
+
+    (mjlab's reward_curriculum only changes the weight.)
+    """
+
+    def __init__(self, cfg: CurriculumTermCfg, env: ManagerBasedRlEnv):
+        self._term_cfg = env.reward_manager.get_term_cfg(cfg.params["reward_name"])
+        self._stages = cfg.params["stages"]
+        steps = [stage["step"] for stage in self._stages]
+        assert steps == sorted(steps), "Stages must be in increasing step order."
+        self._current = -1
+
+    def __call__(self, env, env_ids, reward_name, stages):  # type: ignore[override]
+        return super().__call__(env, env_ids, reward_name, stages)
+
+
 class foot_flat:
     """Penalize a tilted sole while the foot is on the ground.
 
