@@ -171,14 +171,17 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # The recipe's speeds are for robots like G1 (legs ~0.8 m, up to 1 m/s).
     # Scaled down to what microduck (a similar-sized biped on mjlab 1.3.0)
     # trains with. Checkpoint 2400 already went 0.35-0.41 m/s forward when
-    # commanded past its 0.3 training range. Turning up to 1.0 rad/s: with
-    # +-0.5, ignoring a turn command cost little, so turning wasn't learned
-    # (microduck saw the same: "ang +-1.0 makes turning learnable").
+    # commanded past its 0.3 training range. Turning: with +-0.5, ignoring a
+    # turn command cost little, so turning wasn't learned (microduck: "ang
+    # +-1.0 makes turning learnable"); policies have turned near 3 rad/s.
+    # Fixed ranges from the start, no widening during training (see the
+    # curriculum section). The top of these ranges is likely past what the
+    # servos allow; it's there to explore faster speeds with longer strides.
     twist = cfg.commands["twist"]
     assert isinstance(twist, UniformVelocityCommandCfg)
-    twist.ranges.lin_vel_x = (-0.4, 0.4)
-    twist.ranges.lin_vel_y = (-0.3, 0.3)
-    twist.ranges.ang_vel_z = (-1.0, 1.0)
+    twist.ranges.lin_vel_x = (-0.7, 0.7)
+    twist.ranges.lin_vel_y = (-0.4, 0.4)
+    twist.ranges.ang_vel_z = (-3.0, 3.0)
     twist.rel_standing_envs = 0.1
     # The recipe also has "heading" mode (the command is a direction to face,
     # converted into a turn rate) and "forward only" robots (meant for stairs).
@@ -337,10 +340,10 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     #       e.g. a 2.5 cm step costs 0.25, a shuffle (no lift) costs 1.0.
     # The recipe's swing weight (-0.25) is tuned for big robots; at that weight
     # a shuffle costs Trotter almost nothing next to the tracking rewards.
-    # -1.0 makes real steps clearly worth it. (Both terms are only active when
-    # moving is commanded, and the strict tracking stds above mean standing
-    # still to avoid them costs far more than they do.)
-    cfg.rewards["foot_swing_height"].weight = -1.0
+    # -1.0 got steps, but only ~2.5-3.5 cm high; -3.0 pushes toward the full
+    # 5 cm. (Both terms are only active when moving is commanded, and the
+    # tracking rewards mean standing still to avoid them costs far more.)
+    cfg.rewards["foot_swing_height"].weight = -3.0
     for name in ("foot_clearance", "foot_slip"):
         cfg.rewards[name].params["asset_cfg"].site_names = FOOT_SITES
 
@@ -353,16 +356,16 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     )
 
     # Air time: +1 per step for each foot that's been in the air between
-    # 0.125 and 0.3 s, i.e. a reward for real steps. This is the main gait
-    # shaper in microduck (weight 3.0, same window). The 0.125 s minimum makes
-    # quick shuffles worthless (checkpoint 2750 took ~1 cm steps; the old
-    # 0.05 s minimum still paid for those). Only active when moving is
+    # 0.3 and 0.5 s, i.e. a reward for real steps. This is the main gait
+    # shaper in microduck (weight 3.0, window 0.125-0.3 s). With that window
+    # our policies took quick ~0.13 s steps with ~15 deg thigh swing; the
+    # 0.3 s minimum asks for fewer, longer, higher steps. Only active when moving is
     # commanded. Uses the grounded variant: nothing while both feet are in
     # the air, so hopping doesn't pay double.
     cfg.rewards["air_time"].func = trotter_mdp.feet_air_time_grounded
     cfg.rewards["air_time"].weight = 3.0
-    cfg.rewards["air_time"].params["threshold_min"] = 0.125
-    cfg.rewards["air_time"].params["threshold_max"] = 0.3
+    cfg.rewards["air_time"].params["threshold_min"] = 0.3
+    cfg.rewards["air_time"].params["threshold_max"] = 0.5
     cfg.rewards["air_time"].params["command_threshold"] = 0.01
 
     # Recipe term we don't use: angular_momentum needs a sensor we don't have.
@@ -408,23 +411,10 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # A curriculum changes the task during training, from easy to hard.
     # The recipe's two curricula don't fit: one raises the command speed up to
     # 3 m/s, the other makes rough terrain harder (we're on flat ground).
-    # Speed curriculum: widen the command ranges once walking is learned
-    # (the recipe's stages go to 3 m/s, far past Trotter). Stage 0 is the
-    # range set in the commands section above. Physically, Trotter should top
-    # out around a brisk 0.6-0.8 m/s walk: the stride is short and the servos
-    # are slow (see STS3215_NO_LOAD_SPEED); running would need a flight phase
-    # the 1.9 N*m servos likely can't push off for. Where the tracking error
-    # stops improving after a stage, that's the real limit. Stages at 2000 and
-    # 4000: widening at 1000 (V9 run) diluted the slow commands before slow
-    # walking was solid, and tracking got worse at each stage. Both sit 500
-    # iterations away from the push stages (500, 1500, 3000), so the task
-    # never gets harder in two ways at once. Counted from the start of the
-    # run (restarts on --agent.resume).
-    cfg.curriculum["command_vel"].params["velocity_stages"] = [
-        {"step": 0, "lin_vel_x": (-0.4, 0.4), "lin_vel_y": (-0.3, 0.3), "ang_vel_z": (-1.0, 1.0)},
-        {"step": 2000 * 24, "lin_vel_x": (-0.6, 0.6), "lin_vel_y": (-0.4, 0.4), "ang_vel_z": (-1.5, 1.5)},
-        {"step": 4000 * 24, "lin_vel_x": (-0.6, 0.8), "lin_vel_y": (-0.5, 0.5)},
-    ]
+    # No speed curriculum: the command ranges set above stay fixed. Widening
+    # them mid-run (at 1000, then at 2000/4000) made tracking worse at every
+    # stage, and the policy never recovered.
+    cfg.curriculum.pop("command_vel")
     cfg.curriculum.pop("terrain_levels")
 
     # Ours: ramp up the pushes. One PPO iteration = 24 env steps, so
