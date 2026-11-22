@@ -237,13 +237,16 @@ def main():
     parser.add_argument("--task", default="Trotter-Velocity-Flat")
     parser.add_argument("--foxglove", action="store_true", help="stream to Foxglove")
     parser.add_argument("--variant", help="sweep variant the checkpoint was trained with "
-                        "(default: from the run folder name, e.g. ..._clock_w2)")
+                        "(default: from the run folder or file name, e.g. "
+                        "..._clock2/model_1900.pt or clock2_model_1900.pt)")
     args = parser.parse_args()
 
     # Variants like the gait clock add observations, so the env must match.
-    run_name = os.path.basename(os.path.dirname(os.path.abspath(args.checkpoint)))
-    variant = args.variant or next(
-        (v for v in OBSERVATION_VARIANTS if run_name.endswith("_" + v)), None)
+    # Longest match wins ("clock2_fast" over "clock2").
+    path = os.path.abspath(args.checkpoint)
+    names = os.path.basename(os.path.dirname(path)) + "/" + os.path.basename(path)
+    found = [v for v in OBSERVATION_VARIANTS if v in names]
+    variant = args.variant or max(found, key=len, default=None)
     if variant:
         os.environ["TROTTER_VARIANT"] = variant
         print(f"variant: {variant}")
