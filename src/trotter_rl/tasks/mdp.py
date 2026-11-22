@@ -163,3 +163,66 @@ def knee_bird_bend(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> torch.T
     """
     knee = env.scene[asset_cfg.name].data.joint_pos[:, asset_cfg.joint_ids]
     return torch.sum(torch.clamp(-knee, min=0.0), dim=1)
+
+
+# Gait clock: a phase that cycles with a fixed period. The policy sees it
+# (gait_phase) and is paid for moving its feet in time with it (gait_contact,
+# gait_swing_height), which gives a steady left-right rhythm. Time comes from
+# the episode step counter, so the clock starts at 0 on every reset; on the
+# real robot it's a counter in the control loop.
+
+
+def _foot_phases(env: ManagerBasedRlEnv, period: float) -> torch.Tensor:
+    """Each foot's position in the cycle, 0..1: [left, right], half a cycle apart."""
+    t = env.episode_length_buf.float() * env.step_dt
+    phase = torch.remainder(t / period, 1.0)
+    return torch.stack([phase, torch.remainder(phase + 0.5, 1.0)], dim=1)
+
+
+def _moving(env: ManagerBasedRlEnv, command_name: str, threshold: float) -> torch.Tensor:
+    command = env.command_manager.get_command(command_name)
+    total = torch.norm(command[:, :2], dim=1) + torch.abs(command[:, 2])
+    return (total > threshold).float()
+
+
+def gait_phase(env: ManagerBasedRlEnv, period: float) -> torch.Tensor:
+    """Observation: sin and cos of the clock (smooth, no jump at the cycle end)."""
+    angle = 2 * torch.pi * _foot_phases(env, period)[:, 0]
+    return torch.stack([torch.sin(angle), torch.cos(angle)], dim=1)
+
+
+def gait_contact(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    period: float,
+    stance_fraction: float,
+    command_name: str,
+    command_threshold: float,
+) -> torch.Tensor:
+    """+1 per foot that's on the ground in its stance part of the cycle (the
+    first `stance_fraction`) or in the air in its swing part. Only while
+    moving is commanded."""
+    want_stance = _foot_phases(env, period) < stance_fraction
+    contact = env.scene[sensor_name].data.found > 0
+    reward = (contact == want_stance).float().sum(dim=1)
+    return reward * _moving(env, command_name, command_threshold)
+
+
+def gait_swing_height(
+    env: ManagerBasedRlEnv,
+    height_sensor_name: str,
+    period: float,
+    stance_fraction: float,
+    target_height: float,
+    std: float,
+    command_name: str,
+    command_threshold: float,
+) -> torch.Tensor:
+    """Feet follow a height curve: 0 in stance, a sine arch up to
+    `target_height` over the swing. Up to +1 per foot. Only while moving."""
+    phases = _foot_phases(env, period)
+    swing = ((phases - stance_fraction) / (1 - stance_fraction)).clamp(min=0.0)
+    target = target_height * torch.sin(torch.pi * swing)
+    height = env.scene[height_sensor_name].data.heights
+    reward = torch.exp(-((height - target) ** 2) / std**2).sum(dim=1)
+    return reward * _moving(env, command_name, command_threshold)

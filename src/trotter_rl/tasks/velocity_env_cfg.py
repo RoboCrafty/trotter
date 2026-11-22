@@ -35,6 +35,7 @@ import os
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.curriculum_manager import CurriculumTermCfg
+from mjlab.managers.observation_manager import ObservationTermCfg
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.managers.termination_manager import TerminationTermCfg
@@ -496,6 +497,31 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 
 
 
+
+def _enable_gait_clock(cfg: ManagerBasedRlEnvCfg, period: float, contact_weight: float) -> None:
+    """Gait clock (see trotter_mdp.gait_contact): a steady stepping rhythm
+    instead of the air-time window, which paid for any step length and so let
+    the timing wander. Each foot is in the air for the last 40% of the cycle,
+    left and right half a cycle apart (a 0.8 s cycle = 0.32 s steps, like
+    max06's). Swing height follows a 5 cm arch."""
+    for group in ("actor", "critic"):
+        cfg.observations[group].terms["gait_phase"] = ObservationTermCfg(
+            func=trotter_mdp.gait_phase, params={"period": period}
+        )
+    gait = {"period": period, "stance_fraction": 0.6, "command_name": "twist", "command_threshold": 0.01}
+    cfg.rewards.pop("air_time")
+    cfg.rewards["gait_contact"] = RewardTermCfg(
+        func=trotter_mdp.gait_contact,
+        weight=contact_weight,
+        params={"sensor_name": "feet_ground_contact", **gait},
+    )
+    cfg.rewards["gait_swing_height"] = RewardTermCfg(
+        func=trotter_mdp.gait_swing_height,
+        weight=1.0,
+        params={"height_sensor_name": "foot_height_scan", "target_height": 0.05, "std": 0.02, **gait},
+    )
+
+
 def _set_air_window(cfg: ManagerBasedRlEnvCfg, lo: float, hi: float) -> None:
     cfg.rewards["air_time"].params["threshold_min"] = lo
     cfg.rewards["air_time"].params["threshold_max"] = hi
@@ -523,5 +549,19 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
                 ],
             },
         )
+    elif name == "clock_w1":
+        _enable_gait_clock(cfg, period=0.8, contact_weight=1.0)
+    elif name == "clock_w2":
+        _enable_gait_clock(cfg, period=0.8, contact_weight=2.0)
+    elif name == "clock_w4":
+        _enable_gait_clock(cfg, period=0.8, contact_weight=4.0)
+    elif name == "clock_fast":  # 0.65 s cycle, 0.26 s steps
+        _enable_gait_clock(cfg, period=0.65, contact_weight=2.0)
     else:
         raise ValueError(f"unknown TROTTER_VARIANT {name!r}")
+
+
+# Variants that change what the policy observes: playing one of their
+# checkpoints needs the same variant (play_keyboard.py picks it from the run
+# folder name).
+OBSERVATION_VARIANTS = ("clock_w1", "clock_w2", "clock_w4", "clock_fast")
