@@ -35,7 +35,6 @@ import os
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.curriculum_manager import CurriculumTermCfg
-from mjlab.managers.observation_manager import ObservationTermCfg
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.managers.termination_manager import TerminationTermCfg
@@ -359,11 +358,13 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     )
 
     # Air time: +1 per step for each foot that's been in the air between
-    # 0.125 and 0.5 s, i.e. a reward for real steps. This is the main gait
+    # 0.125 and 0.4 s, i.e. a reward for real steps. This is the main gait
     # shaper in microduck (weight 3.0, window 0.125-0.3 s). It pays every
     # step the foot is up inside the window, so longer steps earn more, up to
     # the maximum. With microduck's 0.3 s max our feet stayed up ~0.27 s:
-    # right at the cap. The 0.125 s minimum must stay reachable: at 0.2 or
+    # right at the cap. Max 0.4 s (sweep of 2026-11-22: 0.4 / 0.5 / 0.6) gave
+    # the steadiest gait by 10k iterations: ~0.37 s steps, 2.5 steps/s, 4-5 cm
+    # lift. The 0.125 s minimum must stay reachable: at 0.2 or
     # 0.3 s, young policies (~0.1 s steps) never earned anything from it and
     # settled into fast hopping. Only active when moving is
     # commanded. Uses the grounded variant: nothing while both feet are in
@@ -371,7 +372,7 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     cfg.rewards["air_time"].func = trotter_mdp.feet_air_time_grounded
     cfg.rewards["air_time"].weight = 3.0
     cfg.rewards["air_time"].params["threshold_min"] = 0.125
-    cfg.rewards["air_time"].params["threshold_max"] = 0.5
+    cfg.rewards["air_time"].params["threshold_max"] = 0.4
     cfg.rewards["air_time"].params["command_threshold"] = 0.01
 
     # Recipe term we don't use: angular_momentum needs a sensor we don't have.
@@ -498,117 +499,8 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 
 
 
-def _enable_gait_clock(
-    cfg: ManagerBasedRlEnvCfg,
-    period: float,
-    contact_weight: float,
-    v2: bool = False,
-    swing_only: bool = False,
-) -> None:
-    """Gait clock (see trotter_mdp.gait_contact): a steady stepping rhythm
-    instead of the air-time window, which paid for any step length and so let
-    the timing wander. Each foot is in the air for the last 40% of the cycle,
-    left and right half a cycle apart (a 0.8 s cycle = 0.32 s steps, like
-    max06's). Swing height follows a 5 cm arch."""
-    for group in ("actor", "critic"):
-        cfg.observations[group].terms["gait_phase"] = ObservationTermCfg(
-            func=trotter_mdp.gait_phase, params={"period": period}
-        )
-    gait = {"period": period, "stance_fraction": 0.6, "command_name": "twist", "command_threshold": 0.01}
-    # v2: the gait rewards only pay while the command is followed (w2/w4
-    # marched in place instead of steering), and the swing arch only scores
-    # swing feet (w1 buzzed its feet for the stance points). The tracking
-    # scale backfired: young policies track badly, so the clock paid almost
-    # nothing early and they learned to buzz first (clock2 runs).
-    extra = {"scale_by_tracking": True} if v2 else {}
-    swing_only = swing_only or v2
-    cfg.rewards.pop("air_time")
-    cfg.rewards["gait_contact"] = RewardTermCfg(
-        func=trotter_mdp.gait_contact,
-        weight=contact_weight,
-        params={"sensor_name": "feet_ground_contact", **gait, **extra},
-    )
-    cfg.rewards["gait_swing_height"] = RewardTermCfg(
-        func=trotter_mdp.gait_swing_height,
-        weight=1.0,
-        params={"height_sensor_name": "foot_height_scan", "target_height": 0.05, "std": 0.02,
-                **gait, **extra, **({"swing_only": True} if swing_only else {})},
-    )
-
-
-def _add_hip_roll_sway(cfg: ManagerBasedRlEnvCfg) -> None:
-    """Legs swung out sideways when not asked to (clock runs). The pose
-    reward's hip std (0.08) at weight 0.5 is too weak against the clock."""
-    cfg.rewards["hip_roll_sway"] = RewardTermCfg(
-        func=trotter_mdp.hip_roll_sway,
-        weight=-2.0,
-        params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=(r"joint_hip_.*",)),
-            "command_name": "twist",
-            "vy_full": 0.15,
-        },
-    )
-
-
-def _set_air_window(cfg: ManagerBasedRlEnvCfg, lo: float, hi: float) -> None:
-    cfg.rewards["air_time"].params["threshold_min"] = lo
-    cfg.rewards["air_time"].params["threshold_max"] = hi
-
 
 def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
-    """Sweep variants, each a change from the base config (air time 0.125-0.5 s)."""
-    if name == "max04":
-        _set_air_window(cfg, 0.125, 0.4)
-    elif name == "max06":
-        _set_air_window(cfg, 0.125, 0.6)
-    elif name == "ramp":
-        # Move the window up as steps get longer, keeping the minimum below
-        # the steps the policy already takes. Stages sit away from the push
-        # stages (500, 1500, 3000).
-        cfg.curriculum["air_time_window"] = CurriculumTermCfg(
-            func=trotter_mdp.reward_param_curriculum,
-            params={
-                "reward_name": "air_time",
-                "stages": [
-                    {"step": 0, "params": {"threshold_min": 0.125, "threshold_max": 0.3}},
-                    {"step": 1000 * 24, "params": {"threshold_min": 0.15, "threshold_max": 0.4}},
-                    {"step": 2000 * 24, "params": {"threshold_min": 0.2, "threshold_max": 0.5}},
-                    {"step": 4000 * 24, "params": {"threshold_min": 0.25, "threshold_max": 0.6}},
-                ],
-            },
-        )
-    elif name == "clock_w1":
-        _enable_gait_clock(cfg, period=0.8, contact_weight=1.0)
-    elif name == "clock_w2":
-        _enable_gait_clock(cfg, period=0.8, contact_weight=2.0)
-    elif name == "clock_w4":
-        _enable_gait_clock(cfg, period=0.8, contact_weight=4.0)
-    elif name == "clock_fast":  # 0.65 s cycle, 0.26 s steps
-        _enable_gait_clock(cfg, period=0.65, contact_weight=2.0)
-    elif name == "clock2":
-        _enable_gait_clock(cfg, period=0.8, contact_weight=2.0, v2=True)
-        _add_hip_roll_sway(cfg)
-    elif name == "clock2_nohip":  # clock2 without the hip roll cost
-        _enable_gait_clock(cfg, period=0.8, contact_weight=2.0, v2=True)
-    elif name == "clock2_fast":  # clock2 with a 0.65 s cycle
-        _enable_gait_clock(cfg, period=0.65, contact_weight=2.0, v2=True)
-        _add_hip_roll_sway(cfg)
-    elif name in ("clock3", "clock3_t3"):
-        # clock_w2 (full-strength clock: real 6 cm steps, but it drifted
-        # into turns instead of steering) with the swing-only arch, the hip
-        # roll cost, and the tracking rewards x2 / x3.
-        _enable_gait_clock(cfg, period=0.8, contact_weight=2.0, swing_only=True)
-        _add_hip_roll_sway(cfg)
-        for term in ("track_linear_velocity", "track_linear_velocity_fine", "track_angular_velocity"):
-            cfg.rewards[term].weight *= 3.0 if name == "clock3_t3" else 2.0
-    else:
-        raise ValueError(f"unknown TROTTER_VARIANT {name!r}")
-
-
-# Variants that change what the policy observes: playing one of their
-# checkpoints needs the same variant (play_keyboard.py picks it from the run
-# folder name).
-OBSERVATION_VARIANTS = (
-    "clock_w1", "clock_w2", "clock_w4", "clock_fast", "clock2", "clock2_nohip", "clock2_fast",
-    "clock3", "clock3_t3",
-)
+    """Sweep variants, each a change from the base config. Past sweeps
+    (air-time windows and ramps, a gait clock) are in the git history."""
+    raise ValueError(f"unknown TROTTER_VARIANT {name!r}")

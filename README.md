@@ -17,6 +17,28 @@ sbatch train.slurm                                             # or on Slurm
 uv run mjpython scripts/play_keyboard.py model_<N>.pt          # play (macOS: mjpython)
 ```
 
+## Training results
+
+**Current base (tag `base-max04`):** the config here. Its 10k-iteration run
+(`2026-11-22_10-50-56_max04`, `model_9900.pt`) walks with a steady rhythm: ~2.5
+steps/s, each foot ~0.37 s in the air (+-0.01-0.03 s), 4-5 cm lift, accurate at
+slow forward speeds. Weak at sideways (0.04 of 0.2 m/s) and turning (0.37 of
+1.0 rad/s). Its gait only became steady late (irregular at 4300, steady by
+9900), so judge a promising config at the end, not at 1500.
+
+Lessons from the sweeps (details in the git history):
+
+- Keep the command ranges fixed and reachable. Widening them during training,
+  or ranges past what the servos allow (x +-0.7, yaw +-3.0), made tracking
+  worse every time.
+- Air-time window: raise only the maximum. A minimum above the steps a young
+  policy takes (0.2 or 0.3 s, or a ramp that raises it later) pays nothing,
+  and the policy settles into fast hopping or standing.
+- A gait clock (phase observation + contact-timing reward) was tried three
+  ways; each time the policy found a way to buzz its feet a few mm at ~20
+  steps/s that satisfied it. It would need a cost per lift-off or a minimum
+  swing height before a contact counts.
+
 ## Design notes
 
 ### Knee geometry (V8 -> V9)

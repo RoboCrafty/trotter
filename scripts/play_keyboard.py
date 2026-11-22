@@ -42,7 +42,7 @@ from mjlab.tasks.registry import load_rl_cfg, load_runner_cls
 from mjlab.viewer import NativeMujocoViewer
 
 import trotter_rl.tasks  # noqa: F401  (registers Trotter-Velocity-Flat)
-from trotter_rl.tasks.velocity_env_cfg import OBSERVATION_VARIANTS, trotter_flat_env_cfg
+from trotter_rl.tasks.velocity_env_cfg import trotter_flat_env_cfg
 
 # Change per keypress, and the largest command allowed. The limits are well
 # past the training ranges (0.4 / 0.3 / 1.0)
@@ -236,20 +236,11 @@ def main():
     parser.add_argument("checkpoint", help="path to a model_<N>.pt file")
     parser.add_argument("--task", default="Trotter-Velocity-Flat")
     parser.add_argument("--foxglove", action="store_true", help="stream to Foxglove")
-    parser.add_argument("--variant", help="sweep variant the checkpoint was trained with "
-                        "(default: from the run folder or file name, e.g. "
-                        "..._clock2/model_1900.pt or clock2_model_1900.pt)")
+    parser.add_argument("--variant", help="sweep variant (TROTTER_VARIANT) the checkpoint "
+                        "was trained with, if it changes what the policy observes")
     args = parser.parse_args()
-
-    # Variants like the gait clock add observations, so the env must match.
-    # Longest match wins ("clock2_fast" over "clock2").
-    path = os.path.abspath(args.checkpoint)
-    names = os.path.basename(os.path.dirname(path)) + "/" + os.path.basename(path)
-    found = [v for v in OBSERVATION_VARIANTS if v in names]
-    variant = args.variant or max(found, key=len, default=None)
-    if variant:
-        os.environ["TROTTER_VARIANT"] = variant
-        print(f"variant: {variant}")
+    if args.variant:
+        os.environ["TROTTER_VARIANT"] = args.variant
 
     # Same env as `play` (infinite episodes, no pushes), with one robot whose
     # command is never resampled: the keyboard is the only source.
