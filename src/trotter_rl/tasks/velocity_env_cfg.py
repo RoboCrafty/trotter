@@ -499,7 +499,11 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 
 
 def _enable_gait_clock(
-    cfg: ManagerBasedRlEnvCfg, period: float, contact_weight: float, v2: bool = False
+    cfg: ManagerBasedRlEnvCfg,
+    period: float,
+    contact_weight: float,
+    v2: bool = False,
+    swing_only: bool = False,
 ) -> None:
     """Gait clock (see trotter_mdp.gait_contact): a steady stepping rhythm
     instead of the air-time window, which paid for any step length and so let
@@ -513,8 +517,11 @@ def _enable_gait_clock(
     gait = {"period": period, "stance_fraction": 0.6, "command_name": "twist", "command_threshold": 0.01}
     # v2: the gait rewards only pay while the command is followed (w2/w4
     # marched in place instead of steering), and the swing arch only scores
-    # swing feet (w1 buzzed its feet for the stance points).
+    # swing feet (w1 buzzed its feet for the stance points). The tracking
+    # scale backfired: young policies track badly, so the clock paid almost
+    # nothing early and they learned to buzz first (clock2 runs).
     extra = {"scale_by_tracking": True} if v2 else {}
+    swing_only = swing_only or v2
     cfg.rewards.pop("air_time")
     cfg.rewards["gait_contact"] = RewardTermCfg(
         func=trotter_mdp.gait_contact,
@@ -525,7 +532,7 @@ def _enable_gait_clock(
         func=trotter_mdp.gait_swing_height,
         weight=1.0,
         params={"height_sensor_name": "foot_height_scan", "target_height": 0.05, "std": 0.02,
-                **gait, **extra, **({"swing_only": True} if v2 else {})},
+                **gait, **extra, **({"swing_only": True} if swing_only else {})},
     )
 
 
@@ -586,6 +593,14 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
     elif name == "clock2_fast":  # clock2 with a 0.65 s cycle
         _enable_gait_clock(cfg, period=0.65, contact_weight=2.0, v2=True)
         _add_hip_roll_sway(cfg)
+    elif name in ("clock3", "clock3_t3"):
+        # clock_w2 (full-strength clock: real 6 cm steps, but it drifted
+        # into turns instead of steering) with the swing-only arch, the hip
+        # roll cost, and the tracking rewards x2 / x3.
+        _enable_gait_clock(cfg, period=0.8, contact_weight=2.0, swing_only=True)
+        _add_hip_roll_sway(cfg)
+        for term in ("track_linear_velocity", "track_linear_velocity_fine", "track_angular_velocity"):
+            cfg.rewards[term].weight *= 3.0 if name == "clock3_t3" else 2.0
     else:
         raise ValueError(f"unknown TROTTER_VARIANT {name!r}")
 
@@ -595,4 +610,5 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
 # folder name).
 OBSERVATION_VARIANTS = (
     "clock_w1", "clock_w2", "clock_w4", "clock_fast", "clock2", "clock2_nohip", "clock2_fast",
+    "clock3", "clock3_t3",
 )
