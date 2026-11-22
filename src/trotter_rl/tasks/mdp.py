@@ -191,6 +191,16 @@ def gait_phase(env: ManagerBasedRlEnv, period: float) -> torch.Tensor:
     return torch.stack([torch.sin(angle), torch.cos(angle)], dim=1)
 
 
+def _tracking(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
+    """How well the command is followed, 0..1 (same kernels as the tracking
+    rewards). Gait rewards scaled by this pay little for marching in place."""
+    from mjlab.tasks.velocity.mdp import track_angular_velocity, track_linear_velocity
+
+    lin = track_linear_velocity(env, std=0.1**0.5, command_name=command_name)
+    ang = track_angular_velocity(env, std=0.5**0.5, command_name=command_name)
+    return lin * ang
+
+
 def gait_contact(
     env: ManagerBasedRlEnv,
     sensor_name: str,
@@ -198,6 +208,7 @@ def gait_contact(
     stance_fraction: float,
     command_name: str,
     command_threshold: float,
+    scale_by_tracking: bool = False,
 ) -> torch.Tensor:
     """+1 per foot that's on the ground in its stance part of the cycle (the
     first `stance_fraction`) or in the air in its swing part. Only while
@@ -205,6 +216,8 @@ def gait_contact(
     want_stance = _foot_phases(env, period) < stance_fraction
     contact = env.scene[sensor_name].data.found > 0
     reward = (contact == want_stance).float().sum(dim=1)
+    if scale_by_tracking:
+        reward = reward * _tracking(env, command_name)
     return reward * _moving(env, command_name, command_threshold)
 
 
@@ -217,12 +230,35 @@ def gait_swing_height(
     std: float,
     command_name: str,
     command_threshold: float,
+    swing_only: bool = False,
+    scale_by_tracking: bool = False,
 ) -> torch.Tensor:
     """Feet follow a height curve: 0 in stance, a sine arch up to
-    `target_height` over the swing. Up to +1 per foot. Only while moving."""
+    `target_height` over the swing. Up to +1 per foot. Only while moving.
+
+    swing_only: score only feet in their swing part. Otherwise a foot resting
+    at height 0 in stance scores too, and buzzing the feet a few mm at
+    ~15 steps/s collected half this reward for free (clock_w1)."""
     phases = _foot_phases(env, period)
     swing = ((phases - stance_fraction) / (1 - stance_fraction)).clamp(min=0.0)
     target = target_height * torch.sin(torch.pi * swing)
     height = env.scene[height_sensor_name].data.heights
-    reward = torch.exp(-((height - target) ** 2) / std**2).sum(dim=1)
+    per_foot = torch.exp(-((height - target) ** 2) / std**2)
+    if swing_only:
+        per_foot = per_foot * (swing > 0).float()
+    reward = per_foot.sum(dim=1)
+    if scale_by_tracking:
+        reward = reward * _tracking(env, command_name)
     return reward * _moving(env, command_name, command_threshold)
+
+
+def hip_roll_sway(
+    env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg, command_name: str, vy_full: float
+) -> torch.Tensor:
+    """Cost: |hip roll angle| summed over both legs, i.e. swinging the legs
+    out to the side. Fades out as a sideways command grows (full cost at
+    vy = 0, none from |vy| >= vy_full), since walking sideways needs it."""
+    roll = env.scene[asset_cfg.name].data.joint_pos[:, asset_cfg.joint_ids]
+    vy = env.command_manager.get_command(command_name)[:, 1]
+    scale = 1.0 - (torch.abs(vy) / vy_full).clamp(max=1.0)
+    return torch.sum(torch.abs(roll), dim=1) * scale
