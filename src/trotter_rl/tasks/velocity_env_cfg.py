@@ -34,7 +34,9 @@ import os
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
+from mjlab.envs.mdp import dr
 from mjlab.managers.curriculum_manager import CurriculumTermCfg
+from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.managers.termination_manager import TerminationTermCfg
@@ -507,4 +509,47 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
     """Sweep variants, each a change from the base config. Past sweeps
     (air-time windows and ramps, a gait clock) are in the git history."""
-    raise ValueError(f"unknown TROTTER_VARIANT {name!r}")
+    if name == "side_turn":
+        # The base barely walks sideways (0.04 of 0.2 m/s) and turns slowly
+        # (0.37 of 1.0 rad/s): strict per-axis terms on top of the mixed ones.
+        # Sideways std 0.15, not stricter: the body sways ~0.1 m/s sideways
+        # with each step even when walking straight.
+        for axis, std in (("y", 0.15), ("yaw", 0.3)):
+            cfg.rewards[f"track_{axis}_fine"] = RewardTermCfg(
+                func=trotter_mdp.track_axis_velocity,
+                weight=1.5,
+                params={"command_name": "twist", "axis": axis, "std": std},
+            )
+    elif name == "payload_front":
+        # A ~0.45 kg power bank on the front of the base (center ~5.5 cm in
+        # front of the base's CoM). Random 0.35-0.55 kg per robot, and the
+        # base CoM shifted forward by about the amount the bank moves it.
+        cfg.events["payload"] = EventTermCfg(
+            func=dr.body_mass,
+            mode="startup",
+            params={
+                "asset_cfg": SceneEntityCfg("robot", body_names=(BASE_BODY,)),
+                "operation": "add",
+                "ranges": (0.35, 0.55),
+            },
+        )
+        cfg.events["base_com"].params["ranges"] = {
+            0: (0.01, 0.035),  # x [m]
+            1: (-0.015, 0.015),  # y [m]
+            2: (-0.015, 0.015),  # z [m]
+        }
+    elif name == "stride":
+        # ~50% longer steps: the base's feet travel ~12-19 cm per swing.
+        cfg.rewards["stride"] = RewardTermCfg(
+            func=trotter_mdp.feet_stride,
+            weight=2.0,
+            params={
+                "sensor_name": "feet_ground_contact",
+                "asset_cfg": SceneEntityCfg("robot", site_names=FOOT_SITES),
+                "target": 0.25,
+                "command_name": "twist",
+                "command_threshold": 0.01,
+            },
+        )
+    else:
+        raise ValueError(f"unknown TROTTER_VARIANT {name!r}")

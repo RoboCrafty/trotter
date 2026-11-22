@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.managers.scene_entity_config import SceneEntityCfg
     from mjlab.managers.curriculum_manager import CurriculumTermCfg
+    from mjlab.managers.reward_manager import RewardTermCfg
 
 
 class event_curriculum:
@@ -142,3 +143,52 @@ def knee_bird_bend(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> torch.T
     """
     knee = env.scene[asset_cfg.name].data.joint_pos[:, asset_cfg.joint_ids]
     return torch.sum(torch.clamp(-knee, min=0.0), dim=1)
+
+
+def track_axis_velocity(env: ManagerBasedRlEnv, command_name: str, axis: str, std: float) -> torch.Tensor:
+    """exp(-err^2 / std^2) for one command axis: "y" (sideways) or "yaw" (turn).
+
+    mjlab's tracking terms mix axes (forward + sideways in one error), so a
+    small axis that's ignored costs little: missing a 0.2 m/s sideways
+    command by 0.16 costs ~23% of the linear term at std sqrt(0.1)."""
+    robot = env.scene["robot"].data
+    command = env.command_manager.get_command(command_name)
+    if axis == "y":
+        err = command[:, 1] - robot.root_link_lin_vel_b[:, 1]
+    else:
+        err = command[:, 2] - robot.root_link_ang_vel_b[:, 2]
+    return torch.exp(-(err**2) / std**2)
+
+
+class feet_stride:
+    """Reward for long steps: while a foot is in the air, +distance it has
+    moved (horizontally) since lifting off / target, capped at 1, per step.
+
+    So a step pays more the farther it reaches and the longer it lasts,
+    without paying for hops (nothing when both feet are in the air). Only
+    while moving is commanded."""
+
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRlEnv):
+        n = len(cfg.params["asset_cfg"].site_names)
+        self._liftoff = torch.zeros(env.num_envs, n, 2, device=env.device)
+
+    def __call__(
+        self,
+        env: ManagerBasedRlEnv,
+        sensor_name: str,
+        asset_cfg: SceneEntityCfg,
+        target: float,
+        command_name: str,
+        command_threshold: float,
+    ) -> torch.Tensor:
+        feet_xy = env.scene[asset_cfg.name].data.site_pos_w[:, asset_cfg.site_ids, :2]
+        contact = env.scene[sensor_name].data.found > 0
+        # Feet on the ground keep updating their spot, so in the air it's
+        # the lift-off point.
+        self._liftoff = torch.where(contact.unsqueeze(-1), feet_xy, self._liftoff)
+        dist = torch.norm(feet_xy - self._liftoff, dim=-1)
+        reward = ((dist / target).clamp(max=1.0) * (~contact).float()).sum(dim=1)
+        grounded = contact.any(dim=1).float()
+        command = env.command_manager.get_command(command_name)
+        moving = (torch.norm(command[:, :2], dim=1) + torch.abs(command[:, 2])) > command_threshold
+        return reward * grounded * moving.float()
