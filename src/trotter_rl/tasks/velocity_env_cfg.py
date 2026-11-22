@@ -30,6 +30,7 @@ Read mjlab's recipe next to this file:
 """
 
 import math
+import os
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
@@ -470,6 +471,14 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     cfg.viewer.distance = 1.0
 
     ##
+    # Sweep variants: TROTTER_VARIANT=<name> applies one of these on top of
+    # the config above (see train.slurm). Unset = the base config.
+    ##
+    variant = os.environ.get("TROTTER_VARIANT", "")
+    if variant:
+        _apply_variant(cfg, variant)
+
+    ##
     # Play mode (watching a trained policy).
     ##
     if play:
@@ -479,3 +488,42 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         cfg.curriculum = {}  # Nothing to ramp up (and push_robot is gone).
 
     return cfg
+
+
+def _set_action_rate_max(cfg: ManagerBasedRlEnvCfg, weight: float) -> None:
+    """Cap the action_rate ramp: the strong late smoothness penalty may be
+    what keeps steps short and quick (a big swing means big target changes)."""
+    stages = cfg.curriculum["action_rate_ramp"].params["stages"]
+    for stage in stages:
+        stage["weight"] = max(stage["weight"], weight)
+
+
+def _set_lift(cfg: ManagerBasedRlEnvCfg, height: float) -> None:
+    for name in ("foot_clearance", "foot_swing_height"):
+        cfg.rewards[name].params["target_height"] = height
+
+
+def _set_air_window(cfg: ManagerBasedRlEnvCfg, lo: float, hi: float) -> None:
+    cfg.rewards["air_time"].params["threshold_min"] = lo
+    cfg.rewards["air_time"].params["threshold_max"] = hi
+
+
+def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
+    """Sweep variants, each a change from the base config."""
+    twist = cfg.commands["twist"]
+    assert isinstance(twist, UniformVelocityCommandCfg)
+    if name == "air02":  # easier air-time window, in case 0.3 s is too hard early
+        _set_air_window(cfg, 0.2, 0.4)
+    elif name == "lift7":  # 7 cm steps
+        _set_lift(cfg, 0.07)
+    elif name == "lift7_smooth03":  # 7 cm steps, smoothness capped at -0.3
+        _set_lift(cfg, 0.07)
+        _set_action_rate_max(cfg, -0.3)
+    elif name == "smooth03":  # smoothness capped at -0.3
+        _set_action_rate_max(cfg, -0.3)
+    elif name == "slow":  # the old, reachable command ranges
+        twist.ranges.lin_vel_x = (-0.5, 0.5)
+        twist.ranges.lin_vel_y = (-0.3, 0.3)
+        twist.ranges.ang_vel_z = (-1.5, 1.5)
+    else:
+        raise ValueError(f"unknown TROTTER_VARIANT {name!r}")

@@ -5,7 +5,11 @@
 #   sbatch train.slurm --agent.resume True \
 #       --agent.load-run <run folder> --agent.load-checkpoint model_<N>.pt
 #
-# Extra arguments are passed straight to `train`.
+#   sbatch --export=ALL,TROTTER_VARIANT=lift7 train.slurm   # a sweep variant
+#
+# Extra arguments are passed straight to `train`. Variants are defined at the
+# end of src/trotter_rl/tasks/velocity_env_cfg.py; the run folder gets the
+# variant's name.
 # Watch it:  tail -f outputs/slurm-<JOBID>.out      Stop it:  scancel <JOBID>
 #SBATCH --job-name=trotter_rl
 #SBATCH --partition=h200
@@ -28,4 +32,5 @@ export PYTHONUNBUFFERED=1
 # Warp's kernel cache breaks on the shared /sharchome filesystem; keep it on local disk.
 export WARP_CACHE_PATH=/tmp/$USER/warp_cache
 
-uv run train Trotter-Velocity-Flat --env.scene.num-envs 8192 "$@"
+uv run train Trotter-Velocity-Flat --env.scene.num-envs 8192 \
+    ${TROTTER_VARIANT:+--agent.run-name "$TROTTER_VARIANT"} "$@"
