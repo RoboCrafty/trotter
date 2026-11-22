@@ -38,11 +38,11 @@ import mujoco
 import torch
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
-from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
+from mjlab.tasks.registry import load_rl_cfg, load_runner_cls
 from mjlab.viewer import NativeMujocoViewer
 
 import trotter_rl.tasks  # noqa: F401  (registers Trotter-Velocity-Flat)
-from trotter_rl.tasks.velocity_env_cfg import OBSERVATION_VARIANTS
+from trotter_rl.tasks.velocity_env_cfg import OBSERVATION_VARIANTS, trotter_flat_env_cfg
 
 # Change per keypress, and the largest command allowed. The limits are well
 # past the training ranges (0.4 / 0.3 / 1.0)
@@ -250,7 +250,9 @@ def main():
 
     # Same env as `play` (infinite episodes, no pushes), with one robot whose
     # command is never resampled: the keyboard is the only source.
-    env_cfg = load_env_cfg(args.task, play=True)
+    # Built here, not taken from the registry: the registry's config was made
+    # at import time, before TROTTER_VARIANT was set above.
+    env_cfg = trotter_flat_env_cfg(play=True)
     env_cfg.scene.num_envs = 1
     twist_cfg = env_cfg.commands["twist"]
     twist_cfg.resampling_time_range = (1e9, 1e9)
