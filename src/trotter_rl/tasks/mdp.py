@@ -293,3 +293,63 @@ def split_pose(env: ManagerBasedRlEnv, angle: float, std: float, height_max: flo
     err = torch.minimum((left - angle) ** 2 + (right + angle) ** 2, (left + angle) ** 2 + (right - angle) ** 2)
     low = (1.0 - robot.data.root_link_pos_w[:, 2] / height_max).clamp(0.0, 1.0)
     return torch.exp(-err / std**2) * low
+
+
+class GetupReference:
+    """A get-up motion found by an offline search (getup_reference.npz: robot
+    qpos/qvel at 50 Hz, from lying face down to standing). Shared by the reset
+    event and the tracking reward below."""
+
+    _data = None
+
+    @classmethod
+    def load(cls, device):
+        if cls._data is None:
+            import os
+            ref = np.load(os.path.join(os.path.dirname(__file__), "getup_reference.npz"))
+            cls._data = (torch.tensor(ref["qpos"], device=device), torch.tensor(ref["qvel"], device=device))
+        return cls._data
+
+
+def reset_from_reference(env, env_ids, ref_fraction: float, fallen_pose_range: dict) -> None:
+    """`ref_fraction` of robots start at a random point along the reference
+    get-up (some lying, some kneeling, some nearly up), the rest fallen in a
+    random orientation. Remembers each robot's start frame for the tracking
+    reward (-1 = not following the reference)."""
+    from mjlab.envs.mdp import reset_joints_by_offset, reset_root_state_uniform
+
+    qpos, qvel = GetupReference.load(env.device)
+    if not hasattr(env, "getup_ref_start"):
+        env.getup_ref_start = torch.full((env.num_envs,), -1, dtype=torch.long, device=env.device)
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=env.device)
+    use_ref = torch.rand(len(env_ids), device=env.device) < ref_fraction
+    fallen_ids, ref_ids = env_ids[~use_ref], env_ids[use_ref]
+    env.getup_ref_start[fallen_ids] = -1
+    if len(fallen_ids):
+        reset_root_state_uniform(env, fallen_ids, pose_range=fallen_pose_range)
+        reset_joints_by_offset(env, fallen_ids, position_range=(-0.5, 0.5), velocity_range=(0.0, 0.0))
+    if len(ref_ids):
+        frame = torch.randint(0, len(qpos) - 1, (len(ref_ids),), device=env.device)
+        env.getup_ref_start[ref_ids] = frame
+        q, v = qpos[frame], qvel[frame]
+        root = torch.cat([q[:, :7], v[:, :6]], dim=1)
+        root[:, :3] += env.scene.env_origins[ref_ids]
+        robot = env.scene["robot"]
+        robot.write_root_state_to_sim(root, env_ids=ref_ids)
+        robot.write_joint_state_to_sim(q[:, 7:], v[:, 6:], env_ids=ref_ids)
+
+
+def reference_tracking(env, std: float) -> torch.Tensor:
+    """While a robot started on the reference is still within it: how close
+    its joints are to the reference at the same time, exp(-|q - q_ref|^2/std^2).
+    Afterwards (and for fallen starts) 0: the standing rewards take over."""
+    qpos, _ = GetupReference.load(env.device)
+    start = getattr(env, "getup_ref_start", None)
+    if start is None:
+        return torch.zeros(env.num_envs, device=env.device)
+    idx = start + env.episode_length_buf.long()
+    active = (start >= 0) & (idx < len(qpos))
+    ref_q = qpos[idx.clamp(0, len(qpos) - 1), 7:]
+    err = ((env.scene["robot"].data.joint_pos - ref_q) ** 2).sum(dim=1)
+    return torch.exp(-err / std**2) * active.float()

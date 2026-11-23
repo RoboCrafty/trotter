@@ -532,7 +532,7 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
                 "command_threshold": 0.01,
             },
         )
-    elif name in ("getup", "getup_dyn", "getup_split"):
+    elif name in ("getup", "getup_dyn", "getup_split", "getup_ref"):
         # Can it stand up from lying on the floor? Every episode starts with
         # the robot dropped in a random orientation (on its back, front,
         # side...), with "stand still" commanded and no fall resets. Paid for
@@ -558,7 +558,7 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
         cfg.rewards["base_height"] = RewardTermCfg(
             func=trotter_mdp.base_height_ratio, weight=4.0, params={"target": 0.337}
         )
-        if name in ("getup_dyn", "getup_split"):
+        if name in ("getup_dyn", "getup_split", "getup_ref"):
             # A flat-foot crouch is out of balance on Trotter (no ankle), so
             # getting up would need a dynamic move: throwing the body up with
             # the legs. Pay for each new height record (reaching standing
@@ -573,6 +573,37 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
                     "asset_cfg": SceneEntityCfg("robot", site_names=FOOT_SITES),
                     "std": 0.05,
                 },
+            )
+        if name == "getup_ref":
+            # Get-up guided by a motion found by an offline search (CMA-ES over
+            # key poses, with the servo model): half the robots start at a
+            # random point along it, the rest fallen, and joints near the
+            # motion pay. Needs wider joint limits than the current CAD:
+            # thigh +-180, hip roll 90 out / 15 in, knee +-125 deg.
+            # Train with --agent.algorithm.entropy-coef 0.02.
+            limits = {"joint_thigh_left": (-3.14, 3.14), "joint_thigh_right": (-3.14, 3.14),
+                      "joint_hip_left": (-0.26, 1.57), "joint_hip_right": (-1.57, 0.26),
+                      "joint_knee_left": (-2.18, 2.18), "joint_knee_right": (-2.18, 2.18)}
+            robot = cfg.scene.entities["robot"]
+            make_spec = robot.spec_fn
+
+            def spec_with_limits():
+                spec = make_spec()
+                for joint, (lo, hi) in limits.items():
+                    spec.joint(joint).range = [lo, hi]
+                    spec.joint(joint).limited = True
+                return spec
+
+            robot.spec_fn = spec_with_limits
+            fallen = cfg.events["reset_base"].params["pose_range"]
+            cfg.events.pop("reset_robot_joints")
+            cfg.events["reset_base"] = EventTermCfg(
+                func=trotter_mdp.reset_from_reference,
+                mode="reset",
+                params={"ref_fraction": 0.5, "fallen_pose_range": fallen},
+            )
+            cfg.rewards["reference_tracking"] = RewardTermCfg(
+                func=trotter_mdp.reference_tracking, weight=3.0, params={"std": 0.5}
             )
         if name == "getup_split":
             # Shaped get-up through the splits: half the robots start in the
