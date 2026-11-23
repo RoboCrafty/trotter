@@ -531,7 +531,7 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
                 "command_threshold": 0.01,
             },
         )
-    elif name == "getup":
+    elif name in ("getup", "getup_dyn"):
         # Can it stand up from lying on the floor? Every episode starts with
         # the robot dropped in a random orientation (on its back, front,
         # side...), with "stand still" commanded and no fall resets. Paid for
@@ -557,5 +557,21 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
         cfg.rewards["base_height"] = RewardTermCfg(
             func=trotter_mdp.base_height_ratio, weight=4.0, params={"target": 0.337}
         )
+        if name == "getup_dyn":
+            # A flat-foot crouch is out of balance on Trotter (no ankle), so
+            # getting up would need a dynamic move: throwing the body up with
+            # the legs. Pay for each new height record (reaching standing
+            # height once ~ 2 s of standing) and for feet under the body.
+            # Train with --agent.algorithm.entropy-coef 0.02 (keep exploring).
+            cfg.rewards["height_record"] = RewardTermCfg(func=trotter_mdp.height_record, weight=1000.0)
+            cfg.rewards["feet_under_base"] = RewardTermCfg(
+                func=trotter_mdp.feet_under_base,
+                weight=1.0,
+                params={
+                    "sensor_name": "feet_ground_contact",
+                    "asset_cfg": SceneEntityCfg("robot", site_names=FOOT_SITES),
+                    "std": 0.05,
+                },
+            )
     else:
         raise ValueError(f"unknown TROTTER_VARIANT {name!r}")

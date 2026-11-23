@@ -203,3 +203,39 @@ def upright_linear(env: ManagerBasedRlEnv) -> torch.Tensor:
 def base_height_ratio(env: ManagerBasedRlEnv, target: float) -> torch.Tensor:
     """Base height / standing height, capped at 1 (flat ground at z = 0)."""
     return (env.scene["robot"].data.root_link_pos_w[:, 2] / target).clamp(0.0, 1.0)
+
+
+class height_record:
+    """Paid each time the base gets higher than ever before in this episode:
+    reward = how much the record went up (m). Over an episode it sums to the
+    best height reached, so a throw that gets 2 cm higher than the last try
+    pays right away, even if the robot falls back down."""
+
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRlEnv):
+        self._settle_steps = cfg.params.get("settle_steps", 25)
+        self._best = torch.full((env.num_envs,), float("inf"), device=env.device)
+
+    def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+        self._best[slice(None) if env_ids is None else env_ids] = float("inf")
+
+    def __call__(self, env: ManagerBasedRlEnv, settle_steps: int = 25) -> torch.Tensor:
+        # Robots are dropped from above standing height at reset, so nothing
+        # counts until they've landed (settle_steps); then the record starts
+        # at the height they landed at.
+        height = env.scene["robot"].data.root_link_pos_w[:, 2]
+        settled = env.episode_length_buf >= settle_steps
+        self._best = torch.where(settled & torch.isinf(self._best), height, self._best)
+        gain = torch.where(settled, (height - self._best).clamp(min=0.0), torch.zeros_like(height))
+        self._best = torch.where(settled, torch.maximum(self._best, height), self._best)
+        return gain
+
+
+def feet_under_base(env: ManagerBasedRlEnv, sensor_name: str, asset_cfg: SceneEntityCfg, std: float) -> torch.Tensor:
+    """Both feet on the ground under the body: exp(-d^2/std^2) of the
+    horizontal distance between the base and the midpoint of the feet, only
+    when both feet touch the ground."""
+    robot = env.scene[asset_cfg.name].data
+    feet_mid = robot.site_pos_w[:, asset_cfg.site_ids, :2].mean(dim=1)
+    dist = torch.norm(feet_mid - robot.root_link_pos_w[:, :2], dim=1)
+    both_down = (env.scene[sensor_name].data.found > 0).all(dim=1).float()
+    return torch.exp(-(dist**2) / std**2) * both_down
