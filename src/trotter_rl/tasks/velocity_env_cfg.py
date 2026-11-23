@@ -548,9 +548,14 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
         cfg.commands["twist"].rel_standing_envs = 1.0
         cfg.events["push_robot"].params["velocity_range"] = {}  # no pushes
         cfg.curriculum.pop("push_strength")
-        cfg.rewards["upright_linear"] = RewardTermCfg(func=trotter_mdp.upright_linear, weight=2.0)
+        # No tracking rewards: with "stand still" commanded, lying motionless
+        # has zero velocity and collected them almost in full, so it never
+        # tried to get up (first getup run plateaued lying down).
+        for term in ("track_linear_velocity", "track_linear_velocity_fine", "track_angular_velocity"):
+            cfg.rewards.pop(term)
+        cfg.rewards["upright_linear"] = RewardTermCfg(func=trotter_mdp.upright_linear, weight=4.0)
         cfg.rewards["base_height"] = RewardTermCfg(
-            func=trotter_mdp.base_height_ratio, weight=2.0, params={"target": 0.337}
+            func=trotter_mdp.base_height_ratio, weight=4.0, params={"target": 0.337}
         )
     else:
         raise ValueError(f"unknown TROTTER_VARIANT {name!r}")
