@@ -239,3 +239,57 @@ def feet_under_base(env: ManagerBasedRlEnv, sensor_name: str, asset_cfg: SceneEn
     dist = torch.norm(feet_mid - robot.root_link_pos_w[:, :2], dim=1)
     both_down = (env.scene[sensor_name].data.found > 0).all(dim=1).float()
     return torch.exp(-(dist**2) / std**2) * both_down
+
+
+def reset_split_or_fallen(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor | None,
+    split_fraction: float,
+    split_angle: tuple[float, float],
+    split_height: float,
+    fallen_pose_range: dict,
+) -> None:
+    """Get-up starts: `split_fraction` of robots begin in the splits (one
+    thigh forward, one back, body upright on the ground, random heading and
+    random leg forward), the rest dropped in a random orientation."""
+    from mjlab.envs.mdp import reset_joints_by_offset, reset_root_state_uniform
+
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=env.device)
+    split = torch.rand(len(env_ids), device=env.device) < split_fraction
+    fallen_ids, split_ids = env_ids[~split], env_ids[split]
+    if len(fallen_ids):
+        reset_root_state_uniform(env, fallen_ids, pose_range=fallen_pose_range)
+        reset_joints_by_offset(env, fallen_ids, position_range=(-0.5, 0.5), velocity_range=(0.0, 0.0))
+    if len(split_ids):
+        robot = env.scene["robot"]
+        n = len(split_ids)
+        root = torch.zeros(n, 13, device=env.device)
+        root[:, :3] = env.scene.env_origins[split_ids]
+        root[:, 2] += split_height
+        yaw = (torch.rand(n, device=env.device) * 2 - 1) * torch.pi
+        root[:, 3] = torch.cos(yaw / 2)
+        root[:, 6] = torch.sin(yaw / 2)
+        robot.write_root_state_to_sim(root, env_ids=split_ids)
+        angle = split_angle[0] + (split_angle[1] - split_angle[0]) * torch.rand(n, device=env.device)
+        sign = torch.where(torch.rand(n, device=env.device) < 0.5, 1.0, -1.0)
+        pos = torch.zeros(n, len(robot.joint_names), device=env.device)
+        for i, name in enumerate(robot.joint_names):
+            if name == "joint_thigh_left":
+                pos[:, i] = sign * angle
+            elif name == "joint_thigh_right":
+                pos[:, i] = -sign * angle
+        robot.write_joint_state_to_sim(pos, torch.zeros_like(pos), env_ids=split_ids)
+
+
+def split_pose(env: ManagerBasedRlEnv, angle: float, std: float, height_max: float) -> torch.Tensor:
+    """Stage 1 of getting up: legs in the splits (thighs +-angle, opposite;
+    either leg forward), paid while the body is low and fading out as it
+    rises (zero from `height_max` up), so it leads into the rise."""
+    robot = env.scene["robot"]
+    q = robot.data.joint_pos
+    names = list(robot.joint_names)
+    left, right = q[:, names.index("joint_thigh_left")], q[:, names.index("joint_thigh_right")]
+    err = torch.minimum((left - angle) ** 2 + (right + angle) ** 2, (left + angle) ** 2 + (right - angle) ** 2)
+    low = (1.0 - robot.data.root_link_pos_w[:, 2] / height_max).clamp(0.0, 1.0)
+    return torch.exp(-err / std**2) * low

@@ -35,6 +35,7 @@ import os
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.curriculum_manager import CurriculumTermCfg
+from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.managers.termination_manager import TerminationTermCfg
@@ -531,7 +532,7 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
                 "command_threshold": 0.01,
             },
         )
-    elif name in ("getup", "getup_dyn"):
+    elif name in ("getup", "getup_dyn", "getup_split"):
         # Can it stand up from lying on the floor? Every episode starts with
         # the robot dropped in a random orientation (on its back, front,
         # side...), with "stand still" commanded and no fall resets. Paid for
@@ -557,7 +558,7 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
         cfg.rewards["base_height"] = RewardTermCfg(
             func=trotter_mdp.base_height_ratio, weight=4.0, params={"target": 0.337}
         )
-        if name == "getup_dyn":
+        if name in ("getup_dyn", "getup_split"):
             # A flat-foot crouch is out of balance on Trotter (no ankle), so
             # getting up would need a dynamic move: throwing the body up with
             # the legs. Pay for each new height record (reaching standing
@@ -572,6 +573,30 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
                     "asset_cfg": SceneEntityCfg("robot", site_names=FOOT_SITES),
                     "std": 0.05,
                 },
+            )
+        if name == "getup_split":
+            # Shaped get-up through the splits: half the robots start in the
+            # splits, the rest fallen. Stage 1: get the legs into the splits
+            # while low (split_pose, fades out as the body rises). Stage 2:
+            # rise by closing the legs, then jump (height_record pays for
+            # every new high). Stage 3: stay up (upright, base_height).
+            # Train with --agent.algorithm.entropy-coef 0.02.
+            fallen = cfg.events["reset_base"].params["pose_range"]
+            cfg.events.pop("reset_robot_joints")
+            cfg.events["reset_base"] = EventTermCfg(
+                func=trotter_mdp.reset_split_or_fallen,
+                mode="reset",
+                params={
+                    "split_fraction": 0.5,
+                    "split_angle": (1.3, 1.5),
+                    "split_height": 0.10,
+                    "fallen_pose_range": fallen,
+                },
+            )
+            cfg.rewards["split_pose"] = RewardTermCfg(
+                func=trotter_mdp.split_pose,
+                weight=2.0,
+                params={"angle": 1.4, "std": 0.4, "height_max": 0.25},
             )
     else:
         raise ValueError(f"unknown TROTTER_VARIANT {name!r}")
