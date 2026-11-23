@@ -493,6 +493,10 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         cfg.observations["actor"].enable_corruption = False  # No sensor noise.
         cfg.events.pop("push_robot")  # You can push it yourself in the viewer.
         cfg.curriculum = {}  # Nothing to ramp up (and push_robot is gone).
+        # No resets when it falls, tips or gets lifted: when watching, you
+        # decide when to reset (Enter in the viewer). Training needs them.
+        cfg.terminations.pop("fell_over")
+        cfg.terminations.pop("illegal_contact")
 
     return cfg
 
