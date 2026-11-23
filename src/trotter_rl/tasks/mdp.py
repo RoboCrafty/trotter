@@ -192,3 +192,14 @@ class feet_stride:
         command = env.command_manager.get_command(command_name)
         moving = (torch.norm(command[:, :2], dim=1) + torch.abs(command[:, 2])) > command_threshold
         return reward * grounded * moving.float()
+
+
+def upright_linear(env: ManagerBasedRlEnv) -> torch.Tensor:
+    """0 upside down, 0.5 on its side, 1 upright. Linear, so lying down still
+    shows which way is better (an exp(-tilt^2) kernel is flat there)."""
+    return (1.0 - env.scene["robot"].data.projected_gravity_b[:, 2]) / 2.0
+
+
+def base_height_ratio(env: ManagerBasedRlEnv, target: float) -> torch.Tensor:
+    """Base height / standing height, capped at 1 (flat ground at z = 0)."""
+    return (env.scene["robot"].data.root_link_pos_w[:, 2] / target).clamp(0.0, 1.0)

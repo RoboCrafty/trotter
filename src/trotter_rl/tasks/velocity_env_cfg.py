@@ -495,8 +495,8 @@ def trotter_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         cfg.curriculum = {}  # Nothing to ramp up (and push_robot is gone).
         # No resets when it falls, tips or gets lifted: when watching, you
         # decide when to reset (Enter in the viewer). Training needs them.
-        cfg.terminations.pop("fell_over")
-        cfg.terminations.pop("illegal_contact")
+        cfg.terminations.pop("fell_over", None)
+        cfg.terminations.pop("illegal_contact", None)
 
     return cfg
 
@@ -530,6 +530,27 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
                 "command_name": "twist",
                 "command_threshold": 0.01,
             },
+        )
+    elif name == "getup":
+        # Can it stand up from lying on the floor? Every episode starts with
+        # the robot dropped in a random orientation (on its back, front,
+        # side...), with "stand still" commanded and no fall resets. Paid for
+        # being upright and at standing height; the standing pose reward
+        # then shapes the final posture.
+        cfg.episode_length_s = 10.0
+        cfg.events["reset_base"].params["pose_range"] = {
+            "x": (-0.5, 0.5), "y": (-0.5, 0.5), "z": (0.05, 0.15),
+            "roll": (-3.14, 3.14), "pitch": (-3.14, 3.14), "yaw": (-3.14, 3.14),
+        }
+        cfg.events["reset_robot_joints"].params["position_range"] = (-0.5, 0.5)
+        cfg.terminations.pop("fell_over", None)
+        cfg.terminations.pop("illegal_contact", None)
+        cfg.commands["twist"].rel_standing_envs = 1.0
+        cfg.events["push_robot"].params["velocity_range"] = {}  # no pushes
+        cfg.curriculum.pop("push_strength")
+        cfg.rewards["upright_linear"] = RewardTermCfg(func=trotter_mdp.upright_linear, weight=2.0)
+        cfg.rewards["base_height"] = RewardTermCfg(
+            func=trotter_mdp.base_height_ratio, weight=2.0, params={"target": 0.337}
         )
     else:
         raise ValueError(f"unknown TROTTER_VARIANT {name!r}")
