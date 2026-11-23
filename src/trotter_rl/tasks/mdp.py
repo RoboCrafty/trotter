@@ -311,11 +311,18 @@ class GetupReference:
         return cls._data
 
 
-def reset_from_reference(env, env_ids, ref_fraction: float, fallen_pose_range: dict) -> None:
+def reset_from_reference(
+    env, env_ids, ref_fraction: float, fallen_pose_range: dict, reverse_steps: int = 0
+) -> None:
     """`ref_fraction` of robots start at a random point along the reference
     get-up (some lying, some kneeling, some nearly up), the rest fallen in a
     random orientation. Remembers each robot's start frame for the tracking
-    reward (-1 = not following the reference)."""
+    reward (-1 = not following the reference).
+
+    With `reverse_steps` > 0 (a reverse curriculum), start frames are first
+    drawn from the last 0.5 s of the motion only, and the window grows back
+    to the very beginning (lying) over `reverse_steps` env steps: learn the
+    final push up first, then the earlier parts."""
     from mjlab.envs.mdp import reset_joints_by_offset, reset_root_state_uniform
 
     qpos, qvel = GetupReference.load(env.device)
@@ -330,7 +337,11 @@ def reset_from_reference(env, env_ids, ref_fraction: float, fallen_pose_range: d
         reset_root_state_uniform(env, fallen_ids, pose_range=fallen_pose_range)
         reset_joints_by_offset(env, fallen_ids, position_range=(-0.5, 0.5), velocity_range=(0.0, 0.0))
     if len(ref_ids):
-        frame = torch.randint(0, len(qpos) - 1, (len(ref_ids),), device=env.device)
+        first = 0
+        if reverse_steps > 0:
+            done = min(env.common_step_counter / reverse_steps, 1.0)
+            first = int((len(qpos) - 26) * (1.0 - done))
+        frame = torch.randint(first, len(qpos) - 1, (len(ref_ids),), device=env.device)
         env.getup_ref_start[ref_ids] = frame
         q, v = qpos[frame], qvel[frame]
         root = torch.cat([q[:, :7], v[:, :6]], dim=1)

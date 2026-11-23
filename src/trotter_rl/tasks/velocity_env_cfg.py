@@ -532,7 +532,7 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
                 "command_threshold": 0.01,
             },
         )
-    elif name in ("getup", "getup_dyn", "getup_split", "getup_ref"):
+    elif name in ("getup", "getup_dyn", "getup_split", "getup_ref", "getup_ref2", "getup_rev"):
         # Can it stand up from lying on the floor? Every episode starts with
         # the robot dropped in a random orientation (on its back, front,
         # side...), with "stand still" commanded and no fall resets. Paid for
@@ -558,7 +558,7 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
         cfg.rewards["base_height"] = RewardTermCfg(
             func=trotter_mdp.base_height_ratio, weight=4.0, params={"target": 0.337}
         )
-        if name in ("getup_dyn", "getup_split", "getup_ref"):
+        if name in ("getup_dyn", "getup_split", "getup_ref", "getup_ref2", "getup_rev"):
             # A flat-foot crouch is out of balance on Trotter (no ankle), so
             # getting up would need a dynamic move: throwing the body up with
             # the legs. Pay for each new height record (reaching standing
@@ -574,7 +574,7 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
                     "std": 0.05,
                 },
             )
-        if name == "getup_ref":
+        if name in ("getup_ref", "getup_ref2", "getup_rev"):
             # Get-up guided by a motion found by an offline search (CMA-ES over
             # key poses, with the servo model): half the robots start at a
             # random point along it, the rest fallen, and joints near the
@@ -605,6 +605,17 @@ def _apply_variant(cfg: ManagerBasedRlEnvCfg, name: str) -> None:
             cfg.rewards["reference_tracking"] = RewardTermCfg(
                 func=trotter_mdp.reference_tracking, weight=3.0, params={"std": 0.5}
             )
+        if name in ("getup_ref2", "getup_rev"):
+            # getup_ref barely followed the reference (tracking ~0.02): a
+            # looser std pays for roughly matching it too, a higher weight
+            # makes it worth it, and more robots start on it.
+            cfg.events["reset_base"].params["ref_fraction"] = 0.7
+            cfg.rewards["reference_tracking"].weight = 6.0
+            cfg.rewards["reference_tracking"].params["std"] = 1.0
+        if name == "getup_rev":
+            # Reverse curriculum: start near the end of the motion, then
+            # earlier and earlier, back to lying by iteration 3000.
+            cfg.events["reset_base"].params["reverse_steps"] = 3000 * 24
         if name == "getup_split":
             # Shaped get-up through the splits: half the robots start in the
             # splits, the rest fallen. Stage 1: get the legs into the splits
